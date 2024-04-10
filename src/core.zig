@@ -43,34 +43,48 @@ const Buffer = struct {
 
     }
 
+    pub fn in_bounds(self: Buffer, p: Point) bool {
+        return self.text.items.len > p.y and self.text.items[p.y].items.len > p.x;
+    }
+
     ///inserts char in position p
-    ///adds new line if there is ever a new line char
+    ///if there is ever a new line char
+    ///adds new line and moves all the text after it 
     pub fn insert_at(self: *Buffer, p: Point, value: u8) void {
+        //TODO: error when p is out of bounds
+
         const lines = self.text.items;
+
         if(value == '\n') {
             const len = lines[p.y].items.len;
-            const end_of_line = lines[p.y].items[p.x..len-1];
+
+            const end_of_line: []u8 =  lines[p.y].items[p.x..len-1];
             self.new_line_slice_at(p.y+1, end_of_line);
 
             self.delete_range(.{.y = p.y, .x = p.x},
                               .{.y = p.y, .x = @as(u32, @truncate(len-2))});
             return;
         }
+
         lines[p.y].insert(p.x, value) catch unreachable;
     }
 
     ///inserts slice of text in position p
-    ///adds new line if there is ever a new line char
     pub fn insert_slice_at(self: *Buffer, p: Point, text: []const u8) void {
+        //TODO: optimize for better slice insertion
         var cursor: Point = p;
-        for(text) |chr| {
-            self.insert_at(cursor, chr);
+
+        for(text, 0..) |chr, i| {
             if(chr == '\n'){
-                cursor.x = 0;
+                //avoid creating an extra new line at the end
+                if(i < text.len - 1)
+                    self.insert_at(cursor, chr);
                 cursor.y += 1;
-            } else {
-                cursor.x += 1;
+                cursor.x = 0;
+                continue;
             }
+            self.insert_at(cursor, chr);
+            cursor.x += 1;
         }
     }
 
@@ -83,7 +97,7 @@ const Buffer = struct {
         self.text.insert(index, line) catch unreachable;
     }
 
-    ///inserts a new line in position index and initiate it with text
+    ///inserts a new line in position index and initialise it with text
     pub fn new_line_slice_at(self: *Buffer, index: u32, text: []const u8) void {
         self.new_line_at(index);
         const lines = self.text.items;
@@ -101,8 +115,7 @@ const Buffer = struct {
     pub fn delete_range(self: *Buffer, a: Point, b: Point) void {
         //TODO: optimize for deletion of slices
         for(a.y..b.y+1) |y| {
-            for(a.x..b.x+1) |x| {
-                std.debug.print(" x{d} y{d} \n", .{x,y});
+            for(a.x..b.x+1) |_| {
                 self.delete(.{ .x = @truncate(a.x), .y = @truncate(y)});
             }
         }
@@ -185,7 +198,7 @@ test "buffer functions" {
                    "__3__\n" ++
                    "__4__\n" ++
                    "__5__\n" ++
-                   "__6__\n";
+                   "__6__";
 
     //TEST: init text
     var buf = Buffer.init_text(allocator.allocator(), my_buf);
@@ -198,11 +211,16 @@ test "buffer functions" {
     buf.insert_at(.{ .x = 5, .y = 0}, 'b');
     // buf.insert_at(.{ .x = 9, .y = 0}, '\n');
     buf.delete(.{ .x = 5, .y = 0});
+    
+    buf.insert_slice_at(.{ .x = 3, .y = 0}, my_buf);
+
     std.debug.print("\n", .{});
     for(buf.text.items, 0..) |line, i| {
-        std.debug.print("{d})  {s}", .{i, line.items});
+        // std.debug.print("{d})  {s}", .{i, line.items});
+        _ = i;
+
+        std.debug.print("{s}", .{line.items});
     }
 
 
 }
-
