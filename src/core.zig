@@ -104,6 +104,7 @@ const Buffer = struct {
         lines[index].insertSlice(0, text) catch unreachable;
     }
 
+    ///joins the line at y with the next one
     pub fn join_line_at(self: *Buffer, y: u32) void {
         if(y == self.text.items.len - 1) return;
 
@@ -116,6 +117,7 @@ const Buffer = struct {
     }
 
     ///delete a single char in position p
+    ///and joins or deletes lines when you delete its last char
     pub fn delete(self: *Buffer, p: Point) void {
         const lines = self.text.items;
 
@@ -132,17 +134,34 @@ const Buffer = struct {
         _ = lines[p.y].orderedRemove(p.x);
     }
 
+    ///properly deletes a line in position y and deallocate its memory
     pub fn delete_line(self: *Buffer, y: u32) void {
         self.text.items[y].deinit();
         _ = self.text.orderedRemove(y);
     }
+
+    ///it just deletes from point a to point b inclusevely
     pub fn delete_range(self: *Buffer, a: Point, b: Point) void {
-        //TODO: optimize for deletion of slices
-        for(a.y..b.y+1) |y| {
+        //TODO: optimize for range deletions
+        if(b.y < a.y) return;
+        if(b.y == a.y){
+            if(b.x < a.x) return;
+
             for(a.x..b.x+1) |_| {
-                self.delete(.{ .x = @truncate(a.x), .y = @truncate(y)});
+                self.delete(a);
             }
+            return;
         }
+
+        for((a.y+1)..b.y) |_| {
+            self.delete_line(a.y+1);
+        }
+
+        const len = (self.text.items[a.y].items.len) - a.x + b.x;
+        for(0..len) |_| {
+            self.delete(a);
+        }
+
     }
 };
 
@@ -229,19 +248,12 @@ test "buffer functions" {
     //TODO: do the real testing to guarantee its working
 
     //TEST: insert at
-    buf.delete(.{ .x = 5, .y = 0});
-    buf.delete(.{ .x = 0, .y = 1});
-    buf.delete(.{ .x = 0, .y = 1});
-    buf.delete(.{ .x = 0, .y = 1});
-    buf.delete(.{ .x = 0, .y = 1});
-    // buf.delete(.{ .x = 0, .y = 1});
-    // buf.delete(.{ .x = 0, .y = 1});
     buf.insert_at(.{ .x = 5, .y = 0}, 'a');
     buf.insert_at(.{ .x = 5, .y = 0}, 'a');
     buf.insert_at(.{ .x = 5, .y = 0}, 'a');
     buf.insert_at(.{ .x = 5, .y = 0}, 'b');
-    // buf.insert_at(.{ .x = 9, .y = 0}, '\n');
-    
+    buf.insert_at(.{ .x = 5, .y = 0}, '\n');
+    buf.delete_range(.{ .x = 5, .y = 0}, .{ .x = 1, .y = 4},);
     // buf.insert_slice_at(.{ .x = 3, .y = 0}, my_buf);
 
     std.debug.print("\n", .{});
