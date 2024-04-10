@@ -104,14 +104,38 @@ const Buffer = struct {
         lines[index].insertSlice(0, text) catch unreachable;
     }
 
+    pub fn join_line_at(self: *Buffer, y: u32) void {
+        if(y == self.text.items.len - 1) return;
+
+        _ = self.text.items[y].pop();
+
+        const next_line = self.text.items[y+1].items;
+        self.text.items[y].appendSlice(next_line) catch unreachable;
+
+        self.delete_line(y+1);
+    }
+
     ///delete a single char in position p
     pub fn delete(self: *Buffer, p: Point) void {
         const lines = self.text.items;
-        //TODO: check if it should remove the line or concat the next one in
+
+        if(lines[p.y].items.len == 1) {
+            self.delete_line(p.y);
+            return;
+        }
+        if(p.x == lines[p.y].items.len - 1) {
+            self.join_line_at(p.y);
+            return;
+        }
+
         //TODO: add value to registers
         _ = lines[p.y].orderedRemove(p.x);
     }
 
+    pub fn delete_line(self: *Buffer, y: u32) void {
+        self.text.items[y].deinit();
+        _ = self.text.orderedRemove(y);
+    }
     pub fn delete_range(self: *Buffer, a: Point, b: Point) void {
         //TODO: optimize for deletion of slices
         for(a.y..b.y+1) |y| {
@@ -205,21 +229,27 @@ test "buffer functions" {
     //TODO: do the real testing to guarantee its working
 
     //TEST: insert at
+    buf.delete(.{ .x = 5, .y = 0});
+    buf.delete(.{ .x = 0, .y = 1});
+    buf.delete(.{ .x = 0, .y = 1});
+    buf.delete(.{ .x = 0, .y = 1});
+    buf.delete(.{ .x = 0, .y = 1});
+    // buf.delete(.{ .x = 0, .y = 1});
+    // buf.delete(.{ .x = 0, .y = 1});
     buf.insert_at(.{ .x = 5, .y = 0}, 'a');
     buf.insert_at(.{ .x = 5, .y = 0}, 'a');
     buf.insert_at(.{ .x = 5, .y = 0}, 'a');
     buf.insert_at(.{ .x = 5, .y = 0}, 'b');
     // buf.insert_at(.{ .x = 9, .y = 0}, '\n');
-    buf.delete(.{ .x = 5, .y = 0});
     
-    buf.insert_slice_at(.{ .x = 3, .y = 0}, my_buf);
+    // buf.insert_slice_at(.{ .x = 3, .y = 0}, my_buf);
 
     std.debug.print("\n", .{});
     for(buf.text.items, 0..) |line, i| {
-        // std.debug.print("{d})  {s}", .{i, line.items});
-        _ = i;
+        std.debug.print("{d})  {s}", .{i, line.items});
+        // _ = i;
 
-        std.debug.print("{s}", .{line.items});
+        // std.debug.print("{s}", .{line.items});
     }
 
 
