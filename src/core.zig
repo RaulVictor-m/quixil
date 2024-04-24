@@ -24,6 +24,7 @@ const Buffer = struct {
     pub fn init(allocator: Allocator) Buffer {
         var self: Buffer = undefined;
         self.text = ArrayList(ArrayList(u8)).initCapacity(allocator, 100) catch unreachable;
+        self.name = "*new*";
         return self;
     }
 
@@ -35,12 +36,33 @@ const Buffer = struct {
         return self;
     }
 
+    //given a file name it open a buffer with that file as content
+    //if there is no file with that name just opens an empty buffer
     pub fn init_file(allocator: Allocator, path: []const u8) Buffer {
-        _ = allocator;
-        _ = path;
-        @panic("unimplemented");
-        // return undefined;
+        var self = init(allocator);
+        self.name = path;
+        var file = std.fs.cwd().openFile(path, .{})
+            catch return init_file(allocator, "");
 
+        var buf_reader = std.io.bufferedReader(file.reader());
+        const reader = buf_reader.reader();
+
+        var line = std.ArrayList(u8).init(allocator);
+        defer line.deinit();
+
+        const writer = line.writer();
+        var line_no: usize = 1;
+        while (reader.streamUntilDelimiter(writer, '\n', null)) : (line_no += 1) {
+            defer line.clearRetainingCapacity();
+
+            self.new_line_slice_at(@truncate(line_no - 1), line.items);
+
+        } else |err| switch (err) {
+            error.EndOfStream => {}, // Continue on        defer file.close();
+            else => unreachable,
+        }
+
+        return self;
     }
 
     pub fn in_bounds(self: Buffer, p: Point) bool {
@@ -57,6 +79,11 @@ const Buffer = struct {
 
         if(value == '\n') {
             const len = lines[p.y].items.len;
+
+            if(len < 2 or p.x > len - 2) {
+                self.new_line_at(p.y+1);
+                return;
+            }
 
             const end_of_line: []u8 =  lines[p.y].items[p.x..len-1];
             self.new_line_slice_at(p.y+1, end_of_line);
@@ -158,7 +185,7 @@ const Buffer = struct {
         }
 
         const len = (self.text.items[a.y].items.len) - a.x + b.x;
-        for(0..len) |_| {
+        for(0..len+1) |_| {
             self.delete(a);
         }
 
@@ -233,27 +260,31 @@ pub const default_api = struct {
 };
 
 test "buffer functions" {
-    var buff: [10000]u8 = undefined;
-    var allocator = std.heap.FixedBufferAllocator.init(&buff);
+    var g_allocr = std.heap.GeneralPurposeAllocator(.{}){};
+    // all memory is leaked as of now
+    // defer _ = g_allocr.deinit();
 
-    const my_buf = "__1__\n" ++
-                   "__2__\n" ++
-                   "__3__\n" ++
-                   "__4__\n" ++
-                   "__5__\n" ++
-                   "__6__";
+    var allocator = g_allocr.allocator();
+
+    // const my_buf = "__1__\n" ++
+    //                "__2__\n" ++
+    //                "__3__\n" ++
+    //                "__4__\n" ++
+    //                "__5__\n" ++
+    //                "__6__";
 
     //TEST: init text
-    var buf = Buffer.init_text(allocator.allocator(), my_buf);
+    // var buf = Buffer.init_text(allocator.allocator(), my_buf);
+    var buf = Buffer.init_file(allocator, "build.zig");
     //TODO: do the real testing to guarantee its working
 
     //TEST: insert at
-    buf.insert_at(.{ .x = 5, .y = 0}, 'a');
-    buf.insert_at(.{ .x = 5, .y = 0}, 'a');
-    buf.insert_at(.{ .x = 5, .y = 0}, 'a');
-    buf.insert_at(.{ .x = 5, .y = 0}, 'b');
-    buf.insert_at(.{ .x = 5, .y = 0}, '\n');
-    buf.delete_range(.{ .x = 5, .y = 0}, .{ .x = 1, .y = 4},);
+    // buf.insert_at(.{ .x = 5, .y = 0}, 'a');
+    // buf.insert_at(.{ .x = 5, .y = 0}, 'a');
+    // buf.insert_at(.{ .x = 5, .y = 0}, 'a');
+    // buf.insert_at(.{ .x = 5, .y = 0}, 'b');
+    // buf.insert_at(.{ .x = 5, .y = 0}, '\n');
+    // buf.delete_range(.{ .x = 5, .y = 0}, .{ .x = 1, .y = 4},);
     // buf.insert_slice_at(.{ .x = 3, .y = 0}, my_buf);
 
     std.debug.print("\n", .{});
