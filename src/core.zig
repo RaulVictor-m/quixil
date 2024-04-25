@@ -1,4 +1,5 @@
 const std = @import("std");
+const testing = std.testing;
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 
@@ -34,6 +35,13 @@ const Text = struct {
         try self.insert_slice_at(.{.x = 0, .y = 0}, text);
 
         return self;
+    }
+
+    pub fn deinit(self: *Text) void {
+        for(self.data.items, 0..) |_, y| {
+            self.data.items[y].deinit();
+        }
+        self.data.deinit();
     }
 
     fn in_bounds(self: Text, p: Point) bool {
@@ -186,10 +194,11 @@ const Buffer = struct {
     //if there is no file with that name just opens an empty buffer
     pub fn init_file(allocator: Allocator, path: []const u8) !Buffer {
         var self: Buffer = undefined;
-        self.text = try Text.init(allocator);
-        self.name = path;
         var file = std.fs.cwd().openFile(path, .{})
             catch return try init(allocator);
+
+        self.text = try Text.init(allocator);
+        self.name = path;
 
         var buf_reader = std.io.bufferedReader(file.reader());
         const reader = buf_reader.reader();
@@ -210,6 +219,10 @@ const Buffer = struct {
         }
 
         return self;
+    }
+
+    pub fn deinit(self: *Buffer) void {
+        self.text.deinit();
     }
 
     /// will print the entire buffer and the line number
@@ -288,24 +301,100 @@ pub const default_api = struct {
     }
 };
 
-test "buffer functions" {
-    var g_allocr = std.heap.GeneralPurposeAllocator(.{}){};
-    // all memory is leaked as of now
-    // defer _ = g_allocr.deinit();
+test "core.Text/init_text" {
+    {
+        var text = try Text.init_text(testing.allocator, "");
+        defer text.deinit();
 
-    var allocator = g_allocr.allocator();
+        const lines = text.data.items;
+        try testing.expectEqual(@as(usize, 1), lines.len);
+        try testing.expectEqual(@as(usize, 1), lines[0].items.len);
+        try testing.expectEqual(@as(u8, '\n'), lines[0].items[0]);
+    }
 
-    // const my_buf = "__1__\n" ++
-    //                "__2__\n" ++
-    //                "__3__\n" ++
-    //                "__4__\n" ++
-    //                "__5__\n" ++
-    //                "__6__";
+    {
+        const lines = [_][]const u8{"__1__\n",
+                                    "__2__\n",
+                                    "__3__\n",
+                                    "__4__\n",
+                                    "__5__\n",
+                                    "__6__\n"};
+        // saving lines in a single slice
+        const buf_slice = comptime blk: {
+            var buf: []const u8 = "";
+            inline for(lines) |line| {
+                buf = buf ++ line;
+            }
+            const res = buf;
+            break :blk res;
+        };
 
-    //TEST: init text
-    // var buf = try Buffer.init_text(allocator, my_buf);
-    var buf = try Buffer.init_file(allocator, "build.zig");
-    //TODO: do the real testing to guarantee its working
+        var text = try Text.init_text(testing.allocator, buf_slice);
+        defer text.deinit();
 
-    buf.print_buffer();
+        // testing to see if every line was initialized correctly
+        for(text.data.items, lines) |line, line_sample| {
+            try testing.expectEqualStrings(line_sample, line.items);
+        }
+    }
+}
+
+test "core.Text/insert_at" {
+    // inserting normal chars
+    {
+        var text = try Text.init_text(testing.allocator, "");
+        defer text.deinit();
+
+        try text.insert_at(.{.x=0,.y=0}, 'a');
+        try text.insert_at(.{.x=1,.y=0}, 'b');
+        try text.insert_at(.{.x=2,.y=0}, 'c');
+
+        const lines = text.data.items;
+        try testing.expectEqual(@as(usize, 1), lines.len);
+        try testing.expectEqualStrings("abc\n", lines[0].items);
+    }
+
+    // inserting new line char
+    {
+        var text = try Text.init_text(testing.allocator, "abcdefghij");
+        defer text.deinit();
+
+        const lines = &text.data.items;
+        try text.insert_at(.{.x=1,.y=0}, '\n');
+        try testing.expectEqual(@as(usize, 2), lines.len);
+
+        const sample_lines = @as([2][]const u8, .{
+                                            "a\n",
+                                            "bcdefghij\n"
+        });
+
+        for(lines.*, sample_lines) |line, line_sample| {
+            try testing.expectEqualStrings(line_sample, line.items);
+        }
+
+        try text.insert_at(.{.x=1,.y=1}, '\n');
+        try testing.expectEqual(@as(usize, 3), lines.len);
+    }
+
+    // new line char at the end of the line
+    {
+        var text = try Text.init_text(testing.allocator, "abcdefghij");
+        defer text.deinit();
+
+        const lines = &text.data.items;
+        const line_len: u32 = @truncate(lines.*[0].items.len);
+        try text.insert_at(.{.x = line_len-1,.y=0}, '\n');
+
+        try testing.expectEqual(@as(usize, 2), lines.len);
+
+        const sample_lines = @as([2][]const u8, .{
+                                            "abcdefghij\n",
+                                            "\n",
+        });
+
+        for(lines.*, sample_lines) |line, line_sample| {
+            try testing.expectEqualStrings(line_sample, line.items);
+        }
+    }
+
 }
