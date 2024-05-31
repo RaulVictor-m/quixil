@@ -81,9 +81,15 @@ const Text = struct {
 
         for(text, 0..) |chr, i| {
             if(chr == '\n'){
+
+                const lines = self.data.items;
                 //avoid creating an extra new line at the end
-                if(i < text.len - 1)
-                    try self.insert_at(cursor, chr);
+                if(
+                i == text.len - 1
+                and cursor.y == lines.len - 1
+                and cursor.x == lines[cursor.y].items.len - 1) break;
+
+                try self.insert_at(cursor, chr);
                 cursor.y += 1;
                 cursor.x = 0;
                 continue;
@@ -103,6 +109,7 @@ const Text = struct {
     }
 
     ///inserts a new line in position index and initialise it with text
+    ///new line chars are invalid for this function
     pub fn new_line_slice_at(self: *Text, index: u32, text: []const u8) !void {
         try self.new_line_at(index);
         const lines = self.data.items;
@@ -140,6 +147,7 @@ const Text = struct {
     }
 
     ///properly deletes a line in position y and deallocate its memory
+    ///created for internal use of the text struct - PREFER DELETE
     pub fn delete_line(self: *Text, y: u32) void {
         self.data.items[y].deinit();
         _ = self.data.orderedRemove(y);
@@ -322,7 +330,7 @@ test "core.Text/init_text" {
         // saving lines in a single slice
         const buf_slice = comptime blk: {
             var buf: []const u8 = "";
-            inline for(lines) |line| {
+            for(lines) |line| {
                 buf = buf ++ line;
             }
             const res = buf;
@@ -371,9 +379,6 @@ test "core.Text/insert_at" {
         for(lines.*, sample_lines) |line, line_sample| {
             try testing.expectEqualStrings(line_sample, line.items);
         }
-
-        try text.insert_at(.{.x=1,.y=1}, '\n');
-        try testing.expectEqual(@as(usize, 3), lines.len);
     }
 
     // new line char at the end of the line
@@ -393,6 +398,107 @@ test "core.Text/insert_at" {
         });
 
         for(lines.*, sample_lines) |line, line_sample| {
+            try testing.expectEqualStrings(line_sample, line.items);
+        }
+    }
+
+}
+test "core.Text/insert_slice_at" {
+    // inserting normal chars
+    {
+        var text = try Text.init_text(testing.allocator, "");
+        defer text.deinit();
+
+        try text.insert_slice_at(.{.x=0,.y=0}, "abc");
+
+        const lines = text.data.items;
+        try testing.expectEqual(@as(usize, 1), lines.len);
+
+                        //lines always end with a \n no exceptions
+        try testing.expectEqualStrings("abc\n", lines[0].items);
+    }
+
+    //inserting new lines int the slices
+    {
+        var text = try Text.init_text(testing.allocator, "abcdefghij");
+        defer text.deinit();
+
+        try text.insert_slice_at(.{.x=0,.y=0}, "1:\n");
+
+        //new line is ignored when its is appended at the last line
+        try text.insert_slice_at(.{.x=10,.y=1}, "1:\n");
+        const lines = text.data.items;
+
+        try testing.expectEqual(@as(usize, 2), lines.len);
+
+        const sample_lines = @as([2][]const u8, .{
+                                            "1:\n",
+                                            "abcdefghij1:\n",
+
+        });
+
+        for(lines, sample_lines) |line, line_sample| {
+            try testing.expectEqualStrings(line_sample, line.items);
+        }
+    }
+
+}
+
+test "core.Text/new_line_at" {
+    {
+        var text = try Text.init_text(testing.allocator, "__1__\n__2__\n");
+        defer text.deinit();
+
+        try text.new_line_at(1);
+        try text.new_line_at(0);
+
+        const lines = [_][]const u8{ "\n",
+                                     "__1__\n",
+                                     "\n",
+                                     "__2__\n"};
+
+        try testing.expectEqual(@as(usize, 4), text.data.items.len);
+
+        // testing to see if every line was initialized correctly
+        for(text.data.items, lines) |line, line_sample| {
+            try testing.expectEqualStrings(line_sample, line.items);
+        }
+    }
+}
+
+test "core.Text/new_line_slice_at" {
+    {
+        var text = try Text.init_text(testing.allocator, "__1__\n__2__\n");
+        defer text.deinit();
+
+        try text.new_line_slice_at(1, "going to 2");
+
+        const lines = [_][]const u8{ "__1__\n",
+                                     "going to 2\n",
+                                     "__2__\n"};
+
+        try testing.expectEqual(@as(usize, 3), text.data.items.len);
+
+        // testing to see if every line was initialized correctly
+        for(text.data.items, lines) |line, line_sample| {
+            try testing.expectEqualStrings(line_sample, line.items);
+        }
+    }
+}
+
+test "core.Text/join_line_at" {
+    {
+        var text = try Text.init_text(testing.allocator, "__1__\n__2__\n");
+        defer text.deinit();
+
+        try text.join_line_at(0);
+
+        const lines = [_][]const u8{ "__1____2__\n",};
+
+        try testing.expectEqual(@as(usize, 1), text.data.items.len);
+
+        // testing to see if every line was initialized correctly
+        for(text.data.items, lines) |line, line_sample| {
             try testing.expectEqualStrings(line_sample, line.items);
         }
     }
