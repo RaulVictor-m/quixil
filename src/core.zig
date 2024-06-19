@@ -17,6 +17,72 @@ const Selection = struct {
     },
 };
 
+const Registers = struct {
+    r_a: *void,
+};
+
+const Editor = struct {
+    buffers: ArrayList(Buffer),
+    current_buf: u32,
+    regs: Registers,
+    mode: enum{
+        Selection,
+        Insert,
+        Command,
+        User,
+    },
+};
+
+var g_editor = undefined;
+
+pub const default_api = struct {
+    ///deletes de entire selection
+    pub inline fn delete() void {
+        // g_editor.buffers.items[current_buf].delete();
+    }
+
+    ///insert a char at the begining of every selection
+    pub inline fn insert(char: u8) void {
+        _ = char;
+        @panic("unimplemented");
+    }
+
+    ///appends a char at the end of every selection
+    pub inline fn append(char: u8) void {
+        _ = char;
+        @panic("unimplemented");
+    }
+
+    pub inline fn yank() void {
+        @panic("unimplemented");
+
+    }
+
+    pub inline fn paste() void {
+        @panic("unimplemented");
+
+    }
+
+    pub inline fn paste_a() void {
+        @panic("unimplemented");
+
+    }
+
+    pub inline fn paste_i() void {
+        @panic("unimplemented");
+
+    }
+
+    pub inline fn sel_split_lines() void {
+        @panic("unimplemented");
+
+    }
+
+    pub inline fn sel_split_two() void {
+        @panic("unimplemented");
+
+    }
+};
 const Text = struct {
     data: ArrayList(ArrayList(u8)),
 
@@ -180,21 +246,30 @@ const Text = struct {
 };
 const Buffer = struct {
     name: []const u8,
+    sels: ArrayList(Selection), // sels have to be always sorted
     text: Text,
 
     ///inits a new empty buffer
     pub fn init(allocator: Allocator) !Buffer {
+        //init text
         var self: Buffer = undefined;
         self.name = "*new*";
         self.text = try Text.init_text(allocator, "");
+
+        //init sels
+        self.sels = try ArrayList(Selection).initCapacity(allocator, 10);
         return self;
     }
 
     ///inits a new buffer with the contentx of text
     pub fn init_text(allocator: Allocator, text: []const u8) !Buffer {
+        //init text
         var self: Buffer = undefined;
         self.name = "*new*";
         self.text = try Text.init_text(allocator, text);
+
+        //init sels
+        self.sels = try ArrayList(Selection).initCapacity(allocator, 10);
         return self;
     }
 
@@ -226,6 +301,8 @@ const Buffer = struct {
             else => unreachable,
         }
 
+        //init sels
+        self.sels = try ArrayList(Selection).initCapacity(allocator, 10);
         return self;
     }
 
@@ -243,71 +320,10 @@ const Buffer = struct {
     }
 };
 
-const Registers = struct {
-    r_a: *void,
-};
 
-const Editor = struct {
-    buffers: ArrayList(Buffer),
-    current_buf: u32,
-    regs: Registers,
-    mode: enum{
-        Selection,
-        Insert,
-        Command,
-        User,
-    },
-};
-
-var g_editor = undefined;
-
-pub const default_api = struct {
-    pub inline fn delete() void {
-        @panic("unimplemented");
-    }
-
-    ///insert a char at the begining of every selection
-    pub inline fn insert(char: u8) void {
-        _ = char;
-        @panic("unimplemented");
-    }
-
-    ///appends a char at the end of every selection
-    pub inline fn append(char: u8) void {
-        _ = char;
-        @panic("unimplemented");
-    }
-
-    pub inline fn yank() void {
-        @panic("unimplemented");
-
-    }
-
-    pub inline fn paste() void {
-        @panic("unimplemented");
-
-    }
-
-    pub inline fn paste_a() void {
-        @panic("unimplemented");
-
-    }
-
-    pub inline fn paste_i() void {
-        @panic("unimplemented");
-
-    }
-
-    pub inline fn sel_split_lines() void {
-        @panic("unimplemented");
-
-    }
-
-    pub inline fn sel_split_two() void {
-        @panic("unimplemented");
-
-    }
-};
+// ///////////////////////////////////////////////////////////////////////////
+// testing text data struct
+// ///////////////////////////////////////////////////////////////////////////
 
 test "core.Text/init_text" {
     {
