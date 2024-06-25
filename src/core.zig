@@ -41,7 +41,7 @@ pub const default_api = struct {
         const buf = &g_editor.buffers.items[g_editor.current_buf];
 
         for(&buf.sels.items) |*sel| {
-            const p = buf.text.delete_range(sel.begin, sel.end) catch @panic("API panic on delete");
+            const p = buf.text.delete_range(sel.begin, sel.end) catch @panic("API: panic on delete");
 
             sel.end = p;
             sel.begin = p;
@@ -50,8 +50,23 @@ pub const default_api = struct {
 
     ///insert a char at the begining of every selection
     pub inline fn insert(char: u8) void {
-        _ = char;
-        @panic("unimplemented");
+        const buf = &g_editor.buffers.items[g_editor.current_buf];
+
+        for(&buf.sels.items) |*sel| {
+            const p = buf.text.insert_at(sel.begin, char) catch @panic("API: panic on insert");
+
+            const y = p.y - sel.begin.y;
+            const x = p.x - sel.begin.x;
+
+            sel.begin.y = p.y;
+            sel.begin.x = p.x;
+
+            sel.end.y += y;
+
+            if(sel.begin.y == sel.end.y) {
+                sel.end.x += x;
+            }
+        }
     }
 
     ///appends a char at the end of every selection
@@ -124,16 +139,19 @@ const Text = struct {
     ///inserts char in position p
     ///if there is ever a new line char
     ///adds new line and moves all the text after it 
-    pub fn insert_at(self: *Text, p: Point, value: u8) !void {
+    ///returns a point to the char imediately after the inserted char
+    pub fn insert_at(self: *Text, p: Point, value: u8) !Point {
         if(!self.in_bounds(p)) return error.PointOutOfBounds;
         const lines = self.data.items;
+        var res: Point = p;
 
         if(value == '\n') {
             const len = lines[p.y].items.len;
 
+            res.y += 1;
             if(len < 2 or p.x > len - 2) {
                 try self.new_line_at(p.y+1);
-                return;
+                return res;
             }
 
             const end_of_line: []u8 =  lines[p.y].items[p.x..len-1];
@@ -141,10 +159,13 @@ const Text = struct {
 
             _ = try self.delete_range(.{.y = p.y, .x = p.x},
                               .{.y = p.y, .x = @as(u32, @truncate(len-2))});
-            return;
+            return res;
         }
 
         try lines[p.y].insert(p.x, value);
+
+        res.x += 1;
+        return res;
     }
 
     ///inserts slice of text in position p
@@ -162,12 +183,12 @@ const Text = struct {
                 and cursor.y == lines.len - 1
                 and cursor.x == lines[cursor.y].items.len - 1) break;
 
-                try self.insert_at(cursor, chr);
+                _ = try self.insert_at(cursor, chr);
                 cursor.y += 1;
                 cursor.x = 0;
                 continue;
             }
-            try self.insert_at(cursor, chr);
+            _ = try self.insert_at(cursor, chr);
             cursor.x += 1;
         }
     }
@@ -227,6 +248,7 @@ const Text = struct {
     }
 
     ///it just deletes from point a to point b inclusevely
+    ///returns the point of the char imediately before the last deleted char
     pub fn delete_range(self: *Text, a: Point, b: Point) !Point {
         //TODO: optimize for range deletions
         if(b.y < a.y) return error.InvalidRange;
@@ -381,9 +403,9 @@ test "core.Text/insert_at" {
         var text = try Text.init_text(testing.allocator, "");
         defer text.deinit();
 
-        try text.insert_at(.{.x=0,.y=0}, 'a');
-        try text.insert_at(.{.x=1,.y=0}, 'b');
-        try text.insert_at(.{.x=2,.y=0}, 'c');
+        _ = try text.insert_at(.{.x=0,.y=0}, 'a');
+        _ = try text.insert_at(.{.x=1,.y=0}, 'b');
+        _ = try text.insert_at(.{.x=2,.y=0}, 'c');
 
         const lines = text.data.items;
         try testing.expectEqual(@as(usize, 1), lines.len);
@@ -396,7 +418,7 @@ test "core.Text/insert_at" {
         defer text.deinit();
 
         const lines = &text.data.items;
-        try text.insert_at(.{.x=1,.y=0}, '\n');
+        _ = try text.insert_at(.{.x=1,.y=0}, '\n');
         try testing.expectEqual(@as(usize, 2), lines.len);
 
         const sample_lines = @as([2][]const u8, .{
@@ -416,7 +438,7 @@ test "core.Text/insert_at" {
 
         const lines = &text.data.items;
         const line_len: u32 = @truncate(lines.*[0].items.len);
-        try text.insert_at(.{.x = line_len-1,.y=0}, '\n');
+        _ = try text.insert_at(.{.x = line_len-1,.y=0}, '\n');
 
         try testing.expectEqual(@as(usize, 2), lines.len);
 
