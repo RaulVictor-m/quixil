@@ -38,7 +38,14 @@ var g_editor = undefined;
 pub const default_api = struct {
     ///deletes de entire selection
     pub inline fn delete() void {
-        // g_editor.buffers.items[current_buf].delete();
+        const buf = &g_editor.buffers.items[g_editor.current_buf];
+
+        for(&buf.sels.items) |*sel| {
+            const p = buf.text.delete_range(sel.begin, sel.end) catch @panic("API panic on delete");
+
+            sel.end = p;
+            sel.begin = p;
+        }
     }
 
     ///insert a char at the begining of every selection
@@ -132,7 +139,7 @@ const Text = struct {
             const end_of_line: []u8 =  lines[p.y].items[p.x..len-1];
             try self.new_line_slice_at(p.y+1, end_of_line);
 
-            try self.delete_range(.{.y = p.y, .x = p.x},
+            _ = try self.delete_range(.{.y = p.y, .x = p.x},
                               .{.y = p.y, .x = @as(u32, @truncate(len-2))});
             return;
         }
@@ -220,16 +227,17 @@ const Text = struct {
     }
 
     ///it just deletes from point a to point b inclusevely
-    pub fn delete_range(self: *Text, a: Point, b: Point) !void {
+    pub fn delete_range(self: *Text, a: Point, b: Point) !Point {
         //TODO: optimize for range deletions
-        if(b.y < a.y) return;
+        if(b.y < a.y) return error.InvalidRange;
         if(b.y == a.y){
-            if(b.x < a.x) return;
+            if(b.x < a.x) return error.InvalidRange;
 
             for(a.x..b.x+1) |_| {
                 try self.delete(a);
             }
-            return;
+
+            return a;
         }
 
         for((a.y+1)..b.y) |_| {
@@ -241,6 +249,10 @@ const Text = struct {
             try self.delete(a);
         }
 
+        if(self.in_bounds(a)) return a;
+        var res = a;
+        res.y -= 1;
+        return res;
     }
 
 };
