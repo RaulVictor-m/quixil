@@ -71,8 +71,28 @@ pub const default_api = struct {
 
     ///appends a char at the end of every selection
     pub inline fn append(char: u8) void {
-        _ = char;
-        @panic("unimplemented");
+        const buf = &g_editor.buffers.items[g_editor.current_buf];
+
+        for(&buf.sels.items) |*sel| {
+            if (sel.end.x == (buf.text.data.items[sel.end.y].items.len - 1)){
+                sel.end.y += 1;
+                sel.end.x += 0;
+
+                if(!buf.text.in_bounds(sel.end)) {
+                    buf.text.new_line_at(sel.end.y);
+                }
+                _ = buf.text.insert_at(sel.end, char) catch @panic("API: panic on append");
+            } else {
+                sel.end.x += 1;
+                _ = buf.text.insert_at(sel.end, char) catch @panic("API: panic on append");
+            }
+
+            if(char == '\n'){
+                sel.end.y += 1;
+                sel.end.x += 0;
+            }
+
+        }
     }
 
     pub inline fn yank() void {
