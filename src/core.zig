@@ -38,19 +38,61 @@ var g_editor = undefined;
 pub const default_api = struct {
     ///deletes de entire selection
     pub inline fn delete() void {
-        // g_editor.buffers.items[current_buf].delete();
+        const buf = &g_editor.buffers.items[g_editor.current_buf];
+
+        for(&buf.sels.items) |*sel| {
+            const p = buf.text.delete_range(sel.begin, sel.end) catch @panic("API: panic on delete");
+
+            sel.end = p;
+            sel.begin = p;
+        }
     }
 
     ///insert a char at the begining of every selection
     pub inline fn insert(char: u8) void {
-        _ = char;
-        @panic("unimplemented");
+        const buf = &g_editor.buffers.items[g_editor.current_buf];
+
+        for(&buf.sels.items) |*sel| {
+            const p = buf.text.insert_at(sel.begin, char) catch @panic("API: panic on insert");
+
+            const y = p.y - sel.begin.y;
+            const x = p.x - sel.begin.x;
+
+            sel.begin.y = p.y;
+            sel.begin.x = p.x;
+
+            sel.end.y += y;
+
+            if(sel.begin.y == sel.end.y) {
+                sel.end.x += x;
+            }
+        }
     }
 
     ///appends a char at the end of every selection
     pub inline fn append(char: u8) void {
-        _ = char;
-        @panic("unimplemented");
+        const buf = &g_editor.buffers.items[g_editor.current_buf];
+
+        for(&buf.sels.items) |*sel| {
+            if (sel.end.x == (buf.text.data.items[sel.end.y].items.len - 1)){
+                sel.end.y += 1;
+                sel.end.x += 0;
+
+                if(!buf.text.in_bounds(sel.end)) {
+                    buf.text.new_line_at(sel.end.y);
+                }
+                _ = buf.text.insert_at(sel.end, char) catch @panic("API: panic on append");
+            } else {
+                sel.end.x += 1;
+                _ = buf.text.insert_at(sel.end, char) catch @panic("API: panic on append");
+            }
+
+            if(char == '\n'){
+                sel.end.y += 1;
+                sel.end.x += 0;
+            }
+
+        }
     }
 
     pub inline fn yank() void {
@@ -81,6 +123,103 @@ pub const default_api = struct {
     pub inline fn sel_split_two() void {
         @panic("unimplemented");
 
+    }
+
+    pub inline fn move(mov: enum {Up, Down, LLeft, LRIGHT, WLeft, WRight, }) void {
+        const buf = &g_editor.buffers.items[g_editor.current_buf];
+
+        switch(mov) {
+            .Up     => @panic("mov Up  unimplemented"),
+            .Down   => @panic("mov Down  unimplemented"),
+            .LLeft  => {
+                for(&buf.sels.items) |*sel| {
+                    var p = if(sel.facing == .Front) sel.end else sel.begin;
+
+                    p.x += 1;
+                    if(p.x == buf.text.data.items[p.y].items.len) {
+                        if(p.y == buf.text.data.items.len-1) {
+                            p.x -= 1;
+                        } else {
+                            p.y += 1;
+                            p.x = 0;
+                        }
+                    }
+                    sel.end, sel.begin = p;
+                    sel.facing = .Front;
+                }
+            },
+            .LRIGHT => {
+                for(&buf.sels.items) |*sel| {
+                    var p = if(sel.facing == .Front) sel.end else sel.begin;
+
+                    if(p.x == 0) {
+                        if(p.y != 0) {
+                            p.x = buf.text.data.items[p.y-1].items.len - 1;
+                            p.y -=1;
+                        }
+                    }else {
+                        p.x -= 1;
+                    }
+                    sel.end, sel.begin = p;
+                    sel.facing = .Back;
+                }
+            },
+            .WLeft  => @panic("mov WLeft  unimplemented"),
+            .WRight => @panic("mov WRight  unimplemented"),
+        }
+    }
+
+    pub inline fn move_extend(mov: enum {Up, Down, LLeft, LRIGHT, WLeft, WRight, }) void {
+        const buf = &g_editor.buffers.items[g_editor.current_buf];
+
+        switch(mov) {
+            .Up     => @panic("mov Up  unimplemented"),
+            .Down   => @panic("mov Down  unimplemented"),
+            .LLeft  => {
+                for(&buf.sels.items) |*sel| {
+                    const eq = sel.end == sel.begin;
+                    const p = if(sel.facing == .Front) &sel.end else blk: {
+                        if(eq) {
+                            sel.facing = .Front;
+                            break : blk &sel.end;
+                        }
+                        break : blk &sel.begin;
+                    };
+
+                    if(p.x == buf.text.data.items[p.y].items.len-1) {
+                        if(p.y != buf.text.data.items.len-1) {
+                            p.y += 1;
+                            p.x = 0;
+                        }
+                    } else {
+                        p.x += 1;
+                    }
+                }
+            },
+            .LRIGHT => {
+                for(&buf.sels.items) |*sel| {
+                    const eq = sel.end == sel.begin;
+                    const p = if(sel.facing == .Back) &sel.begin else blk: {
+                        if(eq) {
+                            sel.facing = .Back;
+                            break : blk &sel.Begin;
+                        }
+                        break : blk &sel.end;
+                    };
+
+                    if(p.x == 0) {
+                        if(p.y != 0) {
+                            p.x = buf.text.data.items[p.y-1].items.len - 1;
+                            p.y -=1;
+                        }
+                    }else {
+                        p.x -= 1;
+                    }
+                }
+            },
+            .WLeft  => @panic("mov WLeft  unimplemented"),
+            .WRight => @panic("mov WRight  unimplemented"),
+        }
     }
 };
 const Text = struct {
@@ -117,27 +256,33 @@ const Text = struct {
     ///inserts char in position p
     ///if there is ever a new line char
     ///adds new line and moves all the text after it 
-    pub fn insert_at(self: *Text, p: Point, value: u8) !void {
+    ///returns a point to the char imediately after the inserted char
+    pub fn insert_at(self: *Text, p: Point, value: u8) !Point {
         if(!self.in_bounds(p)) return error.PointOutOfBounds;
         const lines = self.data.items;
+        var res: Point = p;
 
         if(value == '\n') {
             const len = lines[p.y].items.len;
 
+            res.y += 1;
             if(len < 2 or p.x > len - 2) {
                 try self.new_line_at(p.y+1);
-                return;
+                return res;
             }
 
             const end_of_line: []u8 =  lines[p.y].items[p.x..len-1];
             try self.new_line_slice_at(p.y+1, end_of_line);
 
-            try self.delete_range(.{.y = p.y, .x = p.x},
+            _ = try self.delete_range(.{.y = p.y, .x = p.x},
                               .{.y = p.y, .x = @as(u32, @truncate(len-2))});
-            return;
+            return res;
         }
 
         try lines[p.y].insert(p.x, value);
+
+        res.x += 1;
+        return res;
     }
 
     ///inserts slice of text in position p
@@ -155,12 +300,12 @@ const Text = struct {
                 and cursor.y == lines.len - 1
                 and cursor.x == lines[cursor.y].items.len - 1) break;
 
-                try self.insert_at(cursor, chr);
+                _ = try self.insert_at(cursor, chr);
                 cursor.y += 1;
                 cursor.x = 0;
                 continue;
             }
-            try self.insert_at(cursor, chr);
+            _ = try self.insert_at(cursor, chr);
             cursor.x += 1;
         }
     }
@@ -220,16 +365,18 @@ const Text = struct {
     }
 
     ///it just deletes from point a to point b inclusevely
-    pub fn delete_range(self: *Text, a: Point, b: Point) !void {
+    ///returns the point of the char imediately before the last deleted char
+    pub fn delete_range(self: *Text, a: Point, b: Point) !Point {
         //TODO: optimize for range deletions
-        if(b.y < a.y) return;
+        if(b.y < a.y) return error.InvalidRange;
         if(b.y == a.y){
-            if(b.x < a.x) return;
+            if(b.x < a.x) return error.InvalidRange;
 
             for(a.x..b.x+1) |_| {
                 try self.delete(a);
             }
-            return;
+
+            return a;
         }
 
         for((a.y+1)..b.y) |_| {
@@ -241,6 +388,10 @@ const Text = struct {
             try self.delete(a);
         }
 
+        if(self.in_bounds(a)) return a;
+        var res = a;
+        res.y -= 1;
+        return res;
     }
 
 };
@@ -369,9 +520,9 @@ test "core.Text/insert_at" {
         var text = try Text.init_text(testing.allocator, "");
         defer text.deinit();
 
-        try text.insert_at(.{.x=0,.y=0}, 'a');
-        try text.insert_at(.{.x=1,.y=0}, 'b');
-        try text.insert_at(.{.x=2,.y=0}, 'c');
+        _ = try text.insert_at(.{.x=0,.y=0}, 'a');
+        _ = try text.insert_at(.{.x=1,.y=0}, 'b');
+        _ = try text.insert_at(.{.x=2,.y=0}, 'c');
 
         const lines = text.data.items;
         try testing.expectEqual(@as(usize, 1), lines.len);
@@ -384,7 +535,7 @@ test "core.Text/insert_at" {
         defer text.deinit();
 
         const lines = &text.data.items;
-        try text.insert_at(.{.x=1,.y=0}, '\n');
+        _ = try text.insert_at(.{.x=1,.y=0}, '\n');
         try testing.expectEqual(@as(usize, 2), lines.len);
 
         const sample_lines = @as([2][]const u8, .{
@@ -404,7 +555,7 @@ test "core.Text/insert_at" {
 
         const lines = &text.data.items;
         const line_len: u32 = @truncate(lines.*[0].items.len);
-        try text.insert_at(.{.x = line_len-1,.y=0}, '\n');
+        _ = try text.insert_at(.{.x = line_len-1,.y=0}, '\n');
 
         try testing.expectEqual(@as(usize, 2), lines.len);
 
