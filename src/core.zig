@@ -124,6 +124,103 @@ pub const default_api = struct {
         @panic("unimplemented");
 
     }
+
+    pub inline fn move(mov: enum {Up, Down, LLeft, LRIGHT, WLeft, WRight, }) void {
+        const buf = &g_editor.buffers.items[g_editor.current_buf];
+
+        switch(mov) {
+            .Up     => @panic("mov Up  unimplemented"),
+            .Down   => @panic("mov Down  unimplemented"),
+            .LLeft  => {
+                for(&buf.sels.items) |*sel| {
+                    var p = if(sel.facing == .Front) sel.end else sel.begin;
+
+                    p.x += 1;
+                    if(p.x == buf.text.data.items[p.y].items.len) {
+                        if(p.y == buf.text.data.items.len-1) {
+                            p.x -= 1;
+                        } else {
+                            p.y += 1;
+                            p.x = 0;
+                        }
+                    }
+                    sel.end, sel.begin = p;
+                    sel.facing = .Front;
+                }
+            },
+            .LRIGHT => {
+                for(&buf.sels.items) |*sel| {
+                    var p = if(sel.facing == .Front) sel.end else sel.begin;
+
+                    if(p.x == 0) {
+                        if(p.y != 0) {
+                            p.x = buf.text.data.items[p.y-1].items.len - 1;
+                            p.y -=1;
+                        }
+                    }else {
+                        p.x -= 1;
+                    }
+                    sel.end, sel.begin = p;
+                    sel.facing = .Back;
+                }
+            },
+            .WLeft  => @panic("mov WLeft  unimplemented"),
+            .WRight => @panic("mov WRight  unimplemented"),
+        }
+    }
+
+    pub inline fn move_extend(mov: enum {Up, Down, LLeft, LRIGHT, WLeft, WRight, }) void {
+        const buf = &g_editor.buffers.items[g_editor.current_buf];
+
+        switch(mov) {
+            .Up     => @panic("mov Up  unimplemented"),
+            .Down   => @panic("mov Down  unimplemented"),
+            .LLeft  => {
+                for(&buf.sels.items) |*sel| {
+                    const eq = sel.end == sel.begin;
+                    const p = if(sel.facing == .Front) &sel.end else blk: {
+                        if(eq) {
+                            sel.facing = .Front;
+                            break : blk &sel.end;
+                        }
+                        break : blk &sel.begin;
+                    };
+
+                    if(p.x == buf.text.data.items[p.y].items.len-1) {
+                        if(p.y != buf.text.data.items.len-1) {
+                            p.y += 1;
+                            p.x = 0;
+                        }
+                    } else {
+                        p.x += 1;
+                    }
+                }
+            },
+            .LRIGHT => {
+                for(&buf.sels.items) |*sel| {
+                    const eq = sel.end == sel.begin;
+                    const p = if(sel.facing == .Back) &sel.begin else blk: {
+                        if(eq) {
+                            sel.facing = .Back;
+                            break : blk &sel.Begin;
+                        }
+                        break : blk &sel.end;
+                    };
+
+                    if(p.x == 0) {
+                        if(p.y != 0) {
+                            p.x = buf.text.data.items[p.y-1].items.len - 1;
+                            p.y -=1;
+                        }
+                    }else {
+                        p.x -= 1;
+                    }
+                }
+            },
+            .WLeft  => @panic("mov WLeft  unimplemented"),
+            .WRight => @panic("mov WRight  unimplemented"),
+        }
+    }
 };
 const Text = struct {
     data: ArrayList(ArrayList(u8)),
