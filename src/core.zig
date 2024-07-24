@@ -3,39 +3,45 @@ const testing = std.testing;
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 
-const Point = struct {
+pub const Point = struct {
     x: u32,
     y: u32,
 };
 
-const Selection = struct {
-    begin: u32,
-    end: u32,
+pub const Selection = struct {
+    begin: Point,
+    end: Point,
     facing: enum {
         Back,
         Front,
     },
 };
 
-const Registers = struct {
+pub const Registers = struct {
     r_a: *void,
 };
 
-const Editor = struct {
+pub const Editor = struct {
     buffers: ArrayList(Buffer),
-    current_buf: u32,
-    regs: Registers,
+    current_buf: u32 = 0,
+    regs: Registers = undefined,
     mode: enum{
         Selection,
         Insert,
         Command,
         User,
-    },
+    } = .Selection,
 };
 
-var g_editor = undefined;
+pub var g_editor: Editor = .{ .buffers = undefined };
 
+pub const api = default_api;
 pub const default_api = struct {
+    ///returns the editors current buffer
+    pub inline fn c_buf() *Buffer {
+        return &g_editor.buffers.items[g_editor.current_buf];
+    }
+
     ///deletes de entire selection
     pub inline fn delete() void {
         const buf = &g_editor.buffers.items[g_editor.current_buf];
@@ -222,7 +228,7 @@ pub const default_api = struct {
         }
     }
 };
-const Text = struct {
+pub const Text = struct {
     data: ArrayList(ArrayList(u8)),
 
     ///init the lines array with nothing inside
@@ -395,7 +401,7 @@ const Text = struct {
     }
 
 };
-const Buffer = struct {
+pub const Buffer = struct {
     name: []const u8,
     sels: ArrayList(Selection), // sels have to be always sorted
     text: Text,
@@ -409,6 +415,7 @@ const Buffer = struct {
 
         //init sels
         self.sels = try ArrayList(Selection).initCapacity(allocator, 10);
+        _ = try self.sels.append(.{ .begin = .{.x = 0, .y = 0}, .end = .{.x = 0, .y = 0}, .facing = .Front});
         return self;
     }
 
@@ -421,6 +428,7 @@ const Buffer = struct {
 
         //init sels
         self.sels = try ArrayList(Selection).initCapacity(allocator, 10);
+        _ = try self.sels.append(.{ .begin = .{.x = 0, .y = 0}, .end = .{.x = 0, .y = 0}, .facing = .Front});
         return self;
     }
 
@@ -454,11 +462,28 @@ const Buffer = struct {
 
         //init sels
         self.sels = try ArrayList(Selection).initCapacity(allocator, 10);
+        _ = try self.sels.append(.{ .begin = .{.x = 0, .y = 0}, .end = .{.x = 0, .y = 0}, .facing = .Front});
         return self;
     }
 
     pub fn deinit(self: *Buffer) void {
+        self.sels.deinit();
         self.text.deinit();
+    }
+
+    // ///////////////////////////////////////
+    // Text data wrapper
+    // ///////////////////////////////////////
+    pub inline fn lines_size(self: Buffer) usize {
+        return self.text.data.items.len;
+    }
+
+    pub inline fn line_size(self: Buffer, line: usize) usize {
+        return self.text.data.items[line].items.len;
+    }
+
+    pub inline fn get_line(self: Buffer, line: usize) []const u8{
+        return self.text.data.items[line].items;
     }
 
     /// will print the entire buffer and the line number
