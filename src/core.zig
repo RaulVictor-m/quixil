@@ -46,7 +46,7 @@ pub const default_api = struct {
     pub inline fn delete() void {
         const buf = &g_editor.buffers.items[g_editor.current_buf];
 
-        for(&buf.sels.items) |*sel| {
+        for(buf.sels.items) |*sel| {
             const p = buf.text.delete_range(sel.begin, sel.end) catch @panic("API: panic on delete");
 
             sel.end = p;
@@ -58,7 +58,7 @@ pub const default_api = struct {
     pub inline fn insert(char: u8) void {
         const buf = &g_editor.buffers.items[g_editor.current_buf];
 
-        for(&buf.sels.items) |*sel| {
+        for(buf.sels.items) |*sel| {
             const p = buf.text.insert_at(sel.begin, char) catch @panic("API: panic on insert");
 
             const y = p.y - sel.begin.y;
@@ -79,7 +79,7 @@ pub const default_api = struct {
     pub inline fn append(char: u8) void {
         const buf = &g_editor.buffers.items[g_editor.current_buf];
 
-        for(&buf.sels.items) |*sel| {
+        for(buf.sels.items) |*sel| {
             if (sel.end.x == (buf.text.data.items[sel.end.y].items.len - 1)){
                 sel.end.y += 1;
                 sel.end.x += 0;
@@ -131,14 +131,14 @@ pub const default_api = struct {
 
     }
 
-    pub inline fn move(mov: enum {Up, Down, LLeft, LRIGHT, WLeft, WRight, }) void {
+    pub inline fn move(mov: enum {Up, Down, LLeft, LRight, WLeft, WRight, }) void {
         const buf = &g_editor.buffers.items[g_editor.current_buf];
 
         switch(mov) {
             .Up     => @panic("mov Up  unimplemented"),
             .Down   => @panic("mov Down  unimplemented"),
             .LLeft  => {
-                for(&buf.sels.items) |*sel| {
+                for(buf.sels.items) |*sel| {
                     var p = if(sel.facing == .Front) sel.end else sel.begin;
 
                     p.x += 1;
@@ -150,23 +150,25 @@ pub const default_api = struct {
                             p.x = 0;
                         }
                     }
-                    sel.end, sel.begin = p;
+                    sel.begin = p;
+                    sel.end = p;
                     sel.facing = .Front;
                 }
             },
-            .LRIGHT => {
-                for(&buf.sels.items) |*sel| {
+            .LRight => {
+                for(buf.sels.items) |*sel| {
                     var p = if(sel.facing == .Front) sel.end else sel.begin;
 
                     if(p.x == 0) {
                         if(p.y != 0) {
-                            p.x = buf.text.data.items[p.y-1].items.len - 1;
+                            p.x = @as(u32, @truncate(buf.text.data.items[p.y-1].items.len - 1));
                             p.y -=1;
                         }
                     }else {
                         p.x -= 1;
                     }
-                    sel.end, sel.begin = p;
+                    sel.begin = p;
+                    sel.end = p;
                     sel.facing = .Back;
                 }
             },
@@ -175,15 +177,15 @@ pub const default_api = struct {
         }
     }
 
-    pub inline fn move_extend(mov: enum {Up, Down, LLeft, LRIGHT, WLeft, WRight, }) void {
+    pub inline fn move_extend(mov: enum {Up, Down, LLeft, LRight, WLeft, WRight, }) void {
         const buf = &g_editor.buffers.items[g_editor.current_buf];
 
         switch(mov) {
             .Up     => @panic("mov Up  unimplemented"),
             .Down   => @panic("mov Down  unimplemented"),
             .LLeft  => {
-                for(&buf.sels.items) |*sel| {
-                    const eq = sel.end == sel.begin;
+                for(buf.sels.items) |*sel| {
+                    const eq = sel.end.x == sel.begin.x and sel.end.y == sel.begin.y;
                     const p = if(sel.facing == .Front) &sel.end else blk: {
                         if(eq) {
                             sel.facing = .Front;
@@ -202,20 +204,20 @@ pub const default_api = struct {
                     }
                 }
             },
-            .LRIGHT => {
-                for(&buf.sels.items) |*sel| {
-                    const eq = sel.end == sel.begin;
+            .LRight => {
+                for(buf.sels.items) |*sel| {
+                    const eq = sel.end.x == sel.begin.x and sel.end.y == sel.begin.y;
                     const p = if(sel.facing == .Back) &sel.begin else blk: {
                         if(eq) {
                             sel.facing = .Back;
-                            break : blk &sel.Begin;
+                            break : blk &sel.begin;
                         }
                         break : blk &sel.end;
                     };
 
                     if(p.x == 0) {
                         if(p.y != 0) {
-                            p.x = buf.text.data.items[p.y-1].items.len - 1;
+                            p.x = @as(u32, @truncate(buf.text.data.items[p.y-1].items.len - 1));
                             p.y -=1;
                         }
                     }else {
@@ -484,6 +486,10 @@ pub const Buffer = struct {
 
     pub inline fn get_line(self: Buffer, line: usize) []const u8{
         return self.text.data.items[line].items;
+    }
+
+    pub inline fn get_c(self: Buffer, line: usize, row: usize) u8{
+        return self.text.data.items[line].items[row];
     }
 
     /// will print the entire buffer and the line number
