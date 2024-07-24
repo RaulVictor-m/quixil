@@ -11,6 +11,7 @@ fn draw_buf() void{
         _ = term.tb_printf(0, @intCast(y), term.TB_GREEN, 0, "%-.*s", buf.line_size(y)-1, buf.get_line(y).ptr);
 
     }
+
     for(buf.sels.items) |s| {
 
         var s_bx: u32 = s.begin.x;
@@ -34,12 +35,12 @@ fn draw_buf() void{
 }
 
 pub fn main() !void {
-    const text = "I really need this to work\n" ++
-                 "We are going to test out how to it goes\n";
+    // const text = "I really need this to work\n" ++
+    //              "We are going to test out how to it goes\n";
 
 
-    core.g_editor.buffers = std.ArrayList(core.Buffer).init(allocator);
-    try core.g_editor.buffers.append(try core.Buffer.init_text(allocator, text));
+    core.api.init(allocator);
+    defer core.api.deinit(.{});
 
     _ = term.tb_init();
 
@@ -52,11 +53,11 @@ pub fn main() !void {
         if(ev.@"type" != term.TB_EVENT_KEY) continue;
 
         switch(@as(u8, @intCast(ev.ch))) {
-            'd' => core.api.delete(),
-            'l' => core.api.move(.LLeft),
-            'h' => core.api.move(.LRight),
-            'L' => core.api.move_extend(.LLeft),
-            'H' => core.api.move_extend(.LRight),
+            'd' => core.api.delete(.{}),
+            'l' => core.api.move(core.api.Move.LLeft),
+            'h' => core.api.move(core.api.Move.LRight),
+            'L' => core.api.move_extend(core.api.Move.LLeft),
+            'H' => core.api.move_extend(core.api.Move.LRight),
             'Q' => {
                 _ = term.tb_shutdown();
                 break;
@@ -66,7 +67,8 @@ pub fn main() !void {
         draw_buf();
 
     }
-    core.api.c_buf().print_buffer();
+    // core.api.c_buf().print_buffer();
+    std.debug.print("{any}", .{@TypeOf(core.api.init)});
 
 }
 

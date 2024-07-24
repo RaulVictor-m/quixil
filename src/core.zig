@@ -2,6 +2,24 @@ const std = @import("std");
 const testing = std.testing;
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
+const config = @import("config.zig");
+
+/// there is a hook for every API call
+pub const HookType = enum {
+    Init,
+    Deinit,
+    Delete,
+    Insert,
+    Append,
+    Yank,
+    Paste,
+    PasteA,
+    PasteI,
+    SelSplitLines,
+    SelSplitTwo,
+    Move,
+    MoveExtend,
+};
 
 pub const Point = struct {
     x: u32,
@@ -33,17 +51,48 @@ pub const Editor = struct {
     } = .Selection,
 };
 
-pub var g_editor: Editor = .{ .buffers = undefined };
+var g_editor: Editor = .{ .buffers = undefined };
 
 pub const api = default_api;
+
+inline fn hook(t: HookType) void{
+    inline for(config.hooks_list) |h| {
+        if(h[1] == t) h[0]();
+    }
+}
 pub const default_api = struct {
     ///returns the editors current buffer
     pub inline fn c_buf() *Buffer {
         return &g_editor.buffers.items[g_editor.current_buf];
     }
 
+    ///inits the editor's memory and its hooks
+    pub inline fn init(allocator: anytype) void {
+        if(@TypeOf(allocator) != Allocator) @compileError("API init: need to pass an std.mem.Allocator");
+        defer hook(.Init);
+
+        g_editor.buffers = std.ArrayList(Buffer).init(allocator);
+        g_editor.buffers.append(Buffer.init_file(allocator, "README.md") catch @panic("wont init")) catch @panic("wont init");
+
+    }
+
+    ///deinits the editor's memory and its hooks
+    pub inline fn deinit( a : anytype) void {
+        if(@TypeOf(a) != @TypeOf(.{})) @compileError("API deinit: you should provide .{} only");
+        defer hook(.Deinit);
+
+        for(g_editor.buffers.items) |*buf| {
+            buf.deinit();
+        }
+        g_editor.buffers.deinit();
+
+    }
+
     ///deletes de entire selection
-    pub inline fn delete() void {
+    pub inline fn delete( a : anytype) void {
+        if(@TypeOf(a) != @TypeOf(.{})) @compileError("API delete: you should provide .{} only");
+        defer hook(.Delete);
+
         const buf = &g_editor.buffers.items[g_editor.current_buf];
 
         for(buf.sels.items) |*sel| {
@@ -52,10 +101,14 @@ pub const default_api = struct {
             sel.end = p;
             sel.begin = p;
         }
+
     }
 
     ///insert a char at the begining of every selection
-    pub inline fn insert(char: u8) void {
+    pub inline fn insert(char: anytype) void {
+        if(@TypeOf(char) != u8) @compileError("API insert: you should provide a char");
+        defer hook(.Insert);
+
         const buf = &g_editor.buffers.items[g_editor.current_buf];
 
         for(buf.sels.items) |*sel| {
@@ -73,14 +126,18 @@ pub const default_api = struct {
                 sel.end.x += x;
             }
         }
+
     }
 
     ///appends a char at the end of every selection
-    pub inline fn append(char: u8) void {
+    pub inline fn append(char: anytype) void {
+        if(@TypeOf(char) != u8) @compileError("API insert: you should provide a char");
+        defer hook(.Append);
+
         const buf = &g_editor.buffers.items[g_editor.current_buf];
 
         for(buf.sels.items) |*sel| {
-            if (sel.end.x == (buf.text.data.items[sel.end.y].items.len - 1)){
+            if (sel.end.x == (buf.line_size(sel.end.y) - 1)){
                 sel.end.y += 1;
                 sel.end.x += 0;
 
@@ -99,6 +156,7 @@ pub const default_api = struct {
             }
 
         }
+
     }
 
     pub inline fn yank() void {
@@ -130,8 +188,11 @@ pub const default_api = struct {
         @panic("unimplemented");
 
     }
+    pub const Move = enum {Up, Down, LLeft, LRight, WLeft, WRight, };
+    pub inline fn move(mov: anytype) void {
+        if(@TypeOf(mov) != Move) @compileError("API move: you should provide a Move");
+        defer hook(.Move);
 
-    pub inline fn move(mov: enum {Up, Down, LLeft, LRight, WLeft, WRight, }) void {
         const buf = &g_editor.buffers.items[g_editor.current_buf];
 
         switch(mov) {
@@ -142,8 +203,8 @@ pub const default_api = struct {
                     var p = if(sel.facing == .Front) sel.end else sel.begin;
 
                     p.x += 1;
-                    if(p.x == buf.text.data.items[p.y].items.len) {
-                        if(p.y == buf.text.data.items.len-1) {
+                    if(p.x == buf.line_size(p.y)) {
+                        if(p.y == buf.lines_size()-1) {
                             p.x -= 1;
                         } else {
                             p.y += 1;
@@ -161,7 +222,7 @@ pub const default_api = struct {
 
                     if(p.x == 0) {
                         if(p.y != 0) {
-                            p.x = @as(u32, @truncate(buf.text.data.items[p.y-1].items.len - 1));
+                            p.x = @as(u32, @truncate(buf.line_size(p.y-1) - 1));
                             p.y -=1;
                         }
                     }else {
@@ -175,9 +236,13 @@ pub const default_api = struct {
             .WLeft  => @panic("mov WLeft  unimplemented"),
             .WRight => @panic("mov WRight  unimplemented"),
         }
+
     }
 
-    pub inline fn move_extend(mov: enum {Up, Down, LLeft, LRight, WLeft, WRight, }) void {
+    pub inline fn move_extend(mov: anytype) void {
+        if(@TypeOf(mov) != Move) @compileError("API move_extend: you should provide a Move");
+        defer hook(.MoveExtend);
+
         const buf = &g_editor.buffers.items[g_editor.current_buf];
 
         switch(mov) {
@@ -194,8 +259,8 @@ pub const default_api = struct {
                         break : blk &sel.begin;
                     };
 
-                    if(p.x == buf.text.data.items[p.y].items.len-1) {
-                        if(p.y != buf.text.data.items.len-1) {
+                    if(p.x == buf.line_size(p.y)-1) {
+                        if(p.y != buf.lines_size()-1) {
                             p.y += 1;
                             p.x = 0;
                         }
@@ -217,7 +282,7 @@ pub const default_api = struct {
 
                     if(p.x == 0) {
                         if(p.y != 0) {
-                            p.x = @as(u32, @truncate(buf.text.data.items[p.y-1].items.len - 1));
+                            p.x = @as(u32, @truncate(buf.line_size(p.y-1) - 1));
                             p.y -=1;
                         }
                     }else {
