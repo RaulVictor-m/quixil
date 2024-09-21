@@ -5,10 +5,13 @@ const Allocator = std.mem.Allocator;
 const config = @import("config.zig");
 
 /// there is a hook for every API call
+pub const Hook = struct {HookFunc, HookType};
+pub const HookFunc = fn() callconv(.Inline) void;
 pub const HookType = enum {
     Init,
     Deinit,
     Delete,
+    Tick,
     Insert,
     Append,
     Yank,
@@ -19,6 +22,13 @@ pub const HookType = enum {
     SelSplitTwo,
     Move,
     MoveExtend,
+};
+
+pub const Mode = enum{
+    Selection,
+    Insert,
+    Command,
+    User,
 };
 
 pub const Point = struct {
@@ -43,12 +53,7 @@ pub const Editor = struct {
     buffers: ArrayList(Buffer),
     current_buf: u32 = 0,
     regs: Registers = undefined,
-    mode: enum{
-        Selection,
-        Insert,
-        Command,
-        User,
-    } = .Selection,
+    mode: Mode = .Selection,
 };
 
 var g_editor: Editor = .{ .buffers = undefined };
@@ -57,7 +62,7 @@ pub const api = default_api;
 
 inline fn hook(t: HookType) void{
     inline for(config.hooks_list) |h| {
-        if(h[1] == t) h[0]();
+        if(comptime h[1] == t) h[0]();
     }
 }
 pub const default_api = struct {
@@ -66,13 +71,17 @@ pub const default_api = struct {
         return &g_editor.buffers.items[g_editor.current_buf];
     }
 
+    pub inline fn get_mode() Mode {
+        return g_editor.mode;
+    }
+
     ///inits the editor's memory and its hooks
     pub inline fn init(allocator: anytype) void {
         if(@TypeOf(allocator) != Allocator) @compileError("API init: need to pass an std.mem.Allocator");
         defer hook(.Init);
 
         g_editor.buffers = std.ArrayList(Buffer).init(allocator);
-        g_editor.buffers.append(Buffer.init_file(allocator, "README.md") catch @panic("wont init")) catch @panic("wont init");
+        g_editor.buffers.append(Buffer.init_file(allocator, "LICENSE") catch @panic("wont init")) catch @panic("wont init");
 
     }
 
@@ -87,6 +96,12 @@ pub const default_api = struct {
         g_editor.buffers.deinit();
 
     }
+
+    pub inline fn tick ( a : anytype) void {
+        if(@TypeOf(a) != @TypeOf(.{})) @compileError("API tick: you should provide .{} only");
+        defer hook(.Tick);
+    }
+
 
     ///deletes de entire selection
     pub inline fn delete( a : anytype) void {
@@ -106,7 +121,9 @@ pub const default_api = struct {
 
     ///insert a char at the begining of every selection
     pub inline fn insert(char: anytype) void {
-        if(@TypeOf(char) != u8) @compileError("API insert: you should provide a char");
+        if(@TypeOf(char) != u8 and @TypeOf(char) != comptime_int)
+            @compileError("API insert: you should provide a char but provided " ++ @typeName(@TypeOf(char)));
+
         defer hook(.Insert);
 
         const buf = &g_editor.buffers.items[g_editor.current_buf];
@@ -131,7 +148,9 @@ pub const default_api = struct {
 
     ///appends a char at the end of every selection
     pub inline fn append(char: anytype) void {
-        if(@TypeOf(char) != u8) @compileError("API insert: you should provide a char");
+        if(@TypeOf(char) != u8 and @TypeOf(char) != comptime_int)
+            @compileError("API insert: you should provide a char but provided " ++ @typeName(@TypeOf(char)));
+
         defer hook(.Append);
 
         const buf = &g_editor.buffers.items[g_editor.current_buf];
@@ -190,7 +209,7 @@ pub const default_api = struct {
     }
     pub const Move = enum {Up, Down, LLeft, LRight, WLeft, WRight, };
     pub inline fn move(mov: anytype) void {
-        if(@TypeOf(mov) != Move) @compileError("API move: you should provide a Move");
+        if(@TypeOf(mov) != Move) @compileError("API move: you should provide a Move but provided" ++ @typeName(@TypeOf(mov)));
         defer hook(.Move);
 
         const buf = &g_editor.buffers.items[g_editor.current_buf];
