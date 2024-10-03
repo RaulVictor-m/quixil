@@ -1,0 +1,24 @@
+thread 140959 panic: invalid enum value
+/home/raul/code/zigdev/quixil/src/client.zig:123:43: 0x104846f in tick__anon_2280 (quixil)
+    const e_index = @as(KeyBindTableEnum, @enumFromInt(index));
+                                          ^
+/home/raul/code/zigdev/quixil/src/main.zig:18:22: 0x1047544 in main (quixil)
+        core.api.tick(.{});
+                     ^
+/usr/lib/zig/std/start.zig:524:37: 0x1081a10 in main (quixil)
+            const result = root.main() catch |err| {
+                                    ^
+???:?:?: 0x7b4be562ae07 in ??? (libc.so.6)
+Unwind information for `libc.so.6:0x7b4be562ae07` was not available, trace may be incomplete
+
+???:?:?: 0x7b4be562aecb in ??? (libc.so.6)
+???:?:?: 0x1038914 in ??? (???)
+run
++- run quixil failure
+error: the following command terminated unexpectedly:
+/home/raul/code/zigdev/quixil/zig-out/bin/quixil 
+Build Summary: 3/5 steps succeeded; 1 failed (disable with --summary none)
+run transitive failure
++- run quixil failure
+error: the following build command failed with exit code 1:
+/home/raul/code/zigdev/quixil/.zig-cache/o/e6e04e50b6a5f8a380904fb8b9ec5ec2/build /usr/bin/zig /home/raul/code/zigdev/quixil /home/raul/code/zigdev/quixil/.zig-cache /home/raul/.cache/zig --seed 0x5411930b -Z7c2769e6300610f7 run

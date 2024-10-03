@@ -8,6 +8,7 @@ const config = @import("config.zig");
 pub const Hook = struct {HookFunc, HookType};
 pub const HookFunc = fn() callconv(.Inline) void;
 pub const HookType = enum {
+    ChangeMode,
     Init,
     Deinit,
     Delete,
@@ -75,8 +76,16 @@ pub const default_api = struct {
         return g_editor.mode;
     }
 
+    pub fn change_mode(mode: anytype) void {
+        if(@TypeOf(mode) != Mode)
+            @compileError("API change_mode: you should provide a char but provided " ++ @typeName(@TypeOf(mode)));
+         defer hook(.ChangeMode);
+
+        g_editor.mode = mode;
+    }
+
     ///inits the editor's memory and its hooks
-    pub inline fn init(allocator: anytype) void {
+    pub fn init(allocator: anytype) void {
         if(@TypeOf(allocator) != Allocator) @compileError("API init: need to pass an std.mem.Allocator");
         defer hook(.Init);
 
@@ -86,7 +95,7 @@ pub const default_api = struct {
     }
 
     ///deinits the editor's memory and its hooks
-    pub inline fn deinit( a : anytype) void {
+    pub fn deinit( a : anytype) void {
         if(@TypeOf(a) != @TypeOf(.{})) @compileError("API deinit: you should provide .{} only");
         defer hook(.Deinit);
 
@@ -97,14 +106,14 @@ pub const default_api = struct {
 
     }
 
-    pub inline fn tick ( a : anytype) void {
+    pub fn tick ( a : anytype) void {
         if(@TypeOf(a) != @TypeOf(.{})) @compileError("API tick: you should provide .{} only");
         defer hook(.Tick);
     }
 
 
     ///deletes de entire selection
-    pub inline fn delete( a : anytype) void {
+    pub fn delete( a : anytype) void {
         if(@TypeOf(a) != @TypeOf(.{})) @compileError("API delete: you should provide .{} only");
         defer hook(.Delete);
 
@@ -120,7 +129,7 @@ pub const default_api = struct {
     }
 
     ///insert a char at the begining of every selection
-    pub inline fn insert(char: anytype) void {
+    pub fn insert(char: anytype) void {
         if(@TypeOf(char) != u8 and @TypeOf(char) != comptime_int)
             @compileError("API insert: you should provide a char but provided " ++ @typeName(@TypeOf(char)));
 
@@ -132,22 +141,26 @@ pub const default_api = struct {
             const p = buf.text.insert_at(sel.begin, char) catch @panic("API: panic on insert");
 
             const y = p.y - sel.begin.y;
-            const x = p.x - sel.begin.x;
+            const x = p.x -| sel.begin.x;
 
+            if(sel.begin.y == sel.end.y) {
+                if(y > 0) {
+                    sel.end.x = sel.end.x - sel.begin.x;
+                } else
+                    sel.end.x += x;
+            }
             sel.begin.y = p.y;
-            sel.begin.x = p.x;
+            sel.begin.x = if(y > 0) 0 else p.x;
 
             sel.end.y += y;
 
-            if(sel.begin.y == sel.end.y) {
-                sel.end.x += x;
-            }
+
         }
 
     }
 
     ///appends a char at the end of every selection
-    pub inline fn append(char: anytype) void {
+    pub fn append(char: anytype) void {
         if(@TypeOf(char) != u8 and @TypeOf(char) != comptime_int)
             @compileError("API insert: you should provide a char but provided " ++ @typeName(@TypeOf(char)));
 
@@ -178,37 +191,37 @@ pub const default_api = struct {
 
     }
 
-    pub inline fn yank() void {
+    pub fn yank() void {
         @panic("unimplemented");
 
     }
 
-    pub inline fn paste() void {
+    pub fn paste() void {
         @panic("unimplemented");
 
     }
 
-    pub inline fn paste_a() void {
+    pub fn paste_a() void {
         @panic("unimplemented");
 
     }
 
-    pub inline fn paste_i() void {
+    pub fn paste_i() void {
         @panic("unimplemented");
 
     }
 
-    pub inline fn sel_split_lines() void {
+    pub fn sel_split_lines() void {
         @panic("unimplemented");
 
     }
 
-    pub inline fn sel_split_two() void {
+    pub fn sel_split_two() void {
         @panic("unimplemented");
 
     }
     pub const Move = enum {Up, Down, LLeft, LRight, WLeft, WRight, };
-    pub inline fn move(mov: anytype) void {
+    pub fn move(mov: anytype) void {
         if(@TypeOf(mov) != Move) @compileError("API move: you should provide a Move but provided" ++ @typeName(@TypeOf(mov)));
         defer hook(.Move);
 
@@ -258,7 +271,7 @@ pub const default_api = struct {
 
     }
 
-    pub inline fn move_extend(mov: anytype) void {
+    pub fn move_extend(mov: anytype) void {
         if(@TypeOf(mov) != Move) @compileError("API move_extend: you should provide a Move");
         defer hook(.MoveExtend);
 
@@ -354,7 +367,8 @@ pub const Text = struct {
         const lines = self.data.items;
         var res: Point = p;
 
-        if(value == '\n') {
+        // if(value == '\n') {
+        if(value == '\n' or value == 0x0d) { //TODO fix it
             const len = lines[p.y].items.len;
 
             res.y += 1;

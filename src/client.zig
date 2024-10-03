@@ -2,6 +2,7 @@ const core = @import("core.zig");
 const config = @import("config.zig");
 const std = @import("std");
 const term = @cImport(@cInclude("termbox.h"));
+const platform = @import("termbox_plat.zig");
 
 pub const hooks_list = [_]core.Hook {
     .{init, .Init},
@@ -10,24 +11,30 @@ pub const hooks_list = [_]core.Hook {
 };
 
 pub const Mod = enum {
+    None,
     Alt,
     Ctrl,
-    None,
 };
 
-pub const KeyBindFunc = fn(anytype) callconv(.Inline) void;
+pub const KeyBindFunc = fn(anytype) void;
 
 pub const Param = struct {
     type,
     *const anyopaque,
 };
 
+/// given a value it will make a keybindParam back(internal use)
 pub inline fn param(p: anytype) Param {
     comptime var res: Param = undefined;
-    res[0] = @TypeOf(p);
-    res[1] = &@as(res[0], p);
+    res[0] = @TypeOf(&p);
+    res[1] = @ptrCast(&@as(@TypeOf(p), p));
     return res;
 }
+
+pub const KeyPress = struct {
+    Mod,                      //1
+    u8,                       //2
+};
 
 pub const KeyBind = struct {
     core.Mode,                //0
@@ -44,9 +51,12 @@ inline fn get(
         return bind[@intFromEnum(field)];
     }
 
+// ////////////////////////////////////////////////
+// GRAPHICS LAYER
+// ////////////////////////////////////////////////
 
 inline fn init() void {
-    _ = term.tb_init();
+    platform.init();
 }
 
 inline fn draw() void {
@@ -90,64 +100,36 @@ inline fn draw_selections() void {
     _ = term.tb_present();
 }
 
+// ////////////////////////////////////////////////
+// INPUT LAYER
+// ////////////////////////////////////////////////
+
 inline fn get_input() void {
-    var ev: term.tb_event = undefined;
-    const input = term.tb_peek_event(&ev, 100);
-
-
-    if(input == term.TB_ERR_NO_EVENT) return;
-    if(ev.@"type" != term.TB_EVENT_KEY) return;
-
-    var mod: Mod = .None;
-    var key: u8 = undefined;
-
-    if(ev.key == term.TB_KEY_ESC) {
-
-        const sec_input = term.tb_peek_event(&ev, 1);
-        if(sec_input == term.TB_ERR_NO_EVENT) {
-            key = 27; // ascii for ESC
-        } else {
-            mod = .Alt;
-            key = @truncate(ev.ch);
-        }
-
-    } else {
-
-        if(ev.ch == 0) {
-            if(ev.key <= 0x20) { //ctrl keys
-                if( ev.key == 0x8 or ev.key == 0x9 or
-                    ev.key == 0xd or ev.key == 0x1b or
-                    ev.key == 0x1f ) {
-                    key = @truncate(ev.key);
-                } else {
-                    mod = .Ctrl;
-                    key = CTRL_TABLE[ev.key];
-                }
-            }
-        } else {
-            key = @truncate(ev.ch);
-        }
-    }
-
-    const index = get_index(core.api.get_mode(), mod, key);
-    input_action(index);
+    const input = platform.get_input();
+    if(input) |i| {
+        const index = get_index(core.api.get_mode(), i[0], i[1]);
+        input_action(index);
+    } else |_| {}
 }
 
 inline fn input_action(index: u16) void {
-    @setEvalBranchQuota(10000);
+    @setEvalBranchQuota(200000);
     switch(index) {
         inline 0...KeyBindTable.len - 1 => |i| {
+
             if(KeyBindTable[i][1]) |P|{
-                KeyBindTable[i][0](@as(*const P[0], @ptrCast(P[1])).*);
+                // KeyBindTable[i][0](@as(P[0], @ptrCast(@alignCast(P[1]))).*);
+                @call(.always_inline, KeyBindTable[i][0], .{@as(P[0], @ptrCast(@alignCast(P[1]))).*});
             }else {
-                KeyBindTable[i][0](.{});
+                // KeyBindTable[i][0](.{});
+                @call(.always_inline, KeyBindTable[i][0], .{.{}});
             }
         },
         else => unreachable,
     }
 }
 
-inline fn generic_func(_ : anytype) void{
+fn generic_func(_ : anytype) void{
     // unreachable;
 }
 
@@ -159,57 +141,35 @@ inline fn get_index(mode: core.Mode, mod: Mod, key: u32) u16 {
     return (mode_i << 10) | (mod_i << 8) | key_i;
 }
 
-const KeyBindTable = blk: {
-
+const KeyBindTable = table;
+const table = blk: {
+    @setEvalBranchQuota(10000);
     const TableNode = struct{
         KeyBindFunc,
         ?Param,
     };
+
     var result: [4096]TableNode = [_]TableNode{ .{generic_func, null}}**4096;
+
+    //config insert
+    const insert = get_index(.Insert, .None, 0);
 
     for (config.keys) |k| {
         const index = get_index(get(k, .Mode), get(k, .Mod), get(k, .Char));
-        result[index][0] = get(k, .Func);
-        result[index][1] = get(k, .Param);
+        if(result[index][0] == generic_func){
+            result[index][0] = get(k, .Func);
+            result[index][1] = get(k, .Param);
+        } else {
+            @compileError("Two definitions of the same keybind");
+        }
     }
+
+    for (insert..insert+0xff) |i| {
+        if(result[i][0] == generic_func){
+            result[i][0] = core.api.insert;
+            result[i][1] = param(@as(u8, @truncate(i)));
+        }
+    }
+
     break :blk result;
 };
-
-const CTRL_TABLE = [_]u8 {
-'~'               ,//0x00
-'2'               ,//0x00
-'A'               ,//0x01
-'B'               ,//0x02
-'C'               ,//0x03
-'D'               ,//0x04
-'E'               ,//0x05
-'F'               ,//0x06
-'G'               ,//0x07
-'H'               ,//0x08   backspace
-'I'               ,//0x09   tab
-'J'               ,//0x0a
-'K'               ,//0x0b
-'L'               ,//0x0c
-'M'               ,//0x0d   enter
-'N'               ,//0x0e
-'O'               ,//0x0f
-'P'               ,//0x10
-'Q'               ,//0x11
-'R'               ,//0x12
-'S'               ,//0x13
-'T'               ,//0x14
-'U'               ,//0x15
-'V'               ,//0x16
-'W'               ,//0x17
-'X'               ,//0x18
-'Y'               ,//0x19
-'Z'               ,//0x1a
-'['               ,//0x1b   esc
-'\\'              ,//0x1c
-']'               ,//0x1d
-'6'               ,//0x1e
-'/'               ,//0x1f   _
-' '               ,//0x20
-8                 ,//0x7f   backspace
-};
-
