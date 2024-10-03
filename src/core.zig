@@ -91,7 +91,6 @@ pub const default_api = struct {
 
         g_editor.buffers = std.ArrayList(Buffer).init(allocator);
         g_editor.buffers.append(Buffer.init_file(allocator, "LICENSE") catch @panic("wont init")) catch @panic("wont init");
-
     }
 
     ///deinits the editor's memory and its hooks
@@ -153,10 +152,7 @@ pub const default_api = struct {
             sel.begin.x = if(y > 0) 0 else p.x;
 
             sel.end.y += y;
-
-
         }
-
     }
 
     ///appends a char at the end of every selection
@@ -225,11 +221,41 @@ pub const default_api = struct {
         if(@TypeOf(mov) != Move) @compileError("API move: you should provide a Move but provided" ++ @typeName(@TypeOf(mov)));
         defer hook(.Move);
 
-        const buf = &g_editor.buffers.items[g_editor.current_buf];
+        const buf = c_buf();
 
         switch(mov) {
-            .Up     => @panic("mov Up  unimplemented"),
-            .Down   => @panic("mov Down  unimplemented"),
+            .Up     => {
+                for(buf.sels.items) |*sel| {
+                    var p = if(sel.facing == .Front) sel.end else sel.begin;
+
+                    p.y -|= 1;
+                    if(p.x > buf.line_size(p.y)) {
+                        p.x = @truncate(buf.line_size(p.y) - 1);
+                    }
+                    sel.begin = p;
+                    sel.end = p;
+                    sel.facing = .Front;
+                }
+            },
+            .Down   => {
+                for(buf.sels.items) |*sel| {
+                    var p = if(sel.facing == .Front) sel.end else sel.begin;
+
+                    if(p.y == buf.lines_size()-1) {
+                        sel.begin = p;
+                        sel.end = p;
+                        sel.facing = .Back;
+                        return;
+                    }
+                    p.y += 1;
+                    if(p.x > buf.line_size(p.y)) {
+                        p.x = @truncate(buf.line_size(p.y) - 1);
+                    }
+                    sel.begin = p;
+                    sel.end = p;
+                    sel.facing = .Front;
+                }
+            },
             .LLeft  => {
                 for(buf.sels.items) |*sel| {
                     var p = if(sel.facing == .Front) sel.end else sel.begin;
@@ -278,8 +304,53 @@ pub const default_api = struct {
         const buf = &g_editor.buffers.items[g_editor.current_buf];
 
         switch(mov) {
-            .Up     => @panic("mov Up  unimplemented"),
-            .Down   => @panic("mov Down  unimplemented"),
+            .Up     => {
+                for(buf.sels.items) |*sel| {
+                    const p = if(sel.facing == .Back) &sel.begin else blk: {
+                        if(sel.begin.y == sel.end.y and sel.end.y > 0){
+                            sel.facing = .Back;
+
+                            const s = sel.begin;
+                            sel.begin = sel.end;
+                            sel.end = s;
+
+                            break :blk &sel.begin;
+                        }
+                        break :blk &sel.end;
+                    };
+
+                    p.y -|= 1;
+
+                    if(p.x > buf.line_size(p.y)) {
+                        p.x = @truncate(buf.line_size(p.y) - 1);
+                    }
+                }
+            },
+            .Down   => {
+                for(buf.sels.items) |*sel| {
+                    const p = if(sel.facing == .Front) &sel.end else blk: {
+                        if(sel.begin.y == sel.end.y and sel.end.y < buf.lines_size()-1){
+                            sel.facing = .Front;
+
+                            const s = sel.begin;
+                            sel.begin = sel.end;
+                            sel.end = s;
+
+                            break :blk &sel.end;
+                        }
+                        break :blk &sel.begin;
+                    };
+
+                    if(sel.end.y >= buf.lines_size()-1){
+                        return;
+                    }
+                    p.y += 1;
+
+                    if(p.x > buf.line_size(p.y)) {
+                        p.x = @truncate(buf.line_size(p.y) - 1);
+                    }
+                }
+            },
             .LLeft  => {
                 for(buf.sels.items) |*sel| {
                     const eq = sel.end.x == sel.begin.x and sel.end.y == sel.begin.y;

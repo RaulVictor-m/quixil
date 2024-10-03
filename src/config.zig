@@ -36,8 +36,11 @@ pub const keys = [_]KeyBind{
 
      //moves
     .{.Selection, .None, 'l', api.move         , param(Move.LLeft)},
-    // .{.Selection, .Alt,  'L', move_end , null},
     .{.Selection, .None, 'h', api.move         , param(Move.LRight)},
+    .{.Selection, .None, 'k', api.move         , param(Move.Up)},
+    .{.Selection, .None, 'K', api.move_extend  , param(Move.Up)},
+    .{.Selection, .None, 'j', api.move         , param(Move.Down)},
+    .{.Selection, .None, 'J', api.move_extend  , param(Move.Down)},
     .{.Selection, .None, 'L', api.move_extend  , param(Move.LLeft)},
     .{.Selection, .None, 'H', api.move_extend  , param(Move.LRight)},
     .{.Selection, .None, 'e', eduardo          , param("eduardo")},
