@@ -3,7 +3,7 @@ const term = @cImport(@cInclude("termbox.h"));
 const core = @import("core.zig");
 const client = @import("client.zig");
 
-pub inline fn testing() void {
+pub fn testing() void {
     // core.api.insert(100);
     core.api.insert(@as(u8, @intCast('a')));
 }

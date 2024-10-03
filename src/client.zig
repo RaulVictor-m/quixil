@@ -24,7 +24,7 @@ pub const Param = struct {
 };
 
 /// given a value it will make a keybindParam back(internal use)
-pub inline fn param(p: anytype) Param {
+pub fn param(p: anytype) Param {
     comptime var res: Param = undefined;
     res[0] = @TypeOf(&p);
     res[1] = @ptrCast(&@as(@TypeOf(p), p));
@@ -44,7 +44,7 @@ pub const KeyBind = struct {
     ?Param = null,
 };
 
-inline fn get(
+fn get(
     bind: KeyBind,
     field: enum {Mode, Mod, Char, Func, Param}
 ) @TypeOf(bind[@intFromEnum(field)]) {
@@ -55,16 +55,16 @@ inline fn get(
 // GRAPHICS LAYER
 // ////////////////////////////////////////////////
 
-inline fn init() void {
+fn init() void {
     platform.init();
 }
 
-inline fn draw() void {
+fn draw() void {
     draw_buf();
     draw_selections();
 }
 
-inline fn draw_buf() void {
+fn draw_buf() void {
     const buf = core.api.c_buf();
     _ = term.tb_clear();
 
@@ -75,7 +75,7 @@ inline fn draw_buf() void {
     _ = term.tb_present();
 }
 
-inline fn draw_selections() void {
+fn draw_selections() void {
     const buf = core.api.c_buf();
 
     for(buf.sels.items) |s| {
@@ -104,7 +104,7 @@ inline fn draw_selections() void {
 // INPUT LAYER
 // ////////////////////////////////////////////////
 
-inline fn get_input() void {
+fn get_input() void {
     const input = platform.get_input();
     if(input) |i| {
         const index = get_index(core.api.get_mode(), i[0], i[1]);
@@ -112,7 +112,7 @@ inline fn get_input() void {
     } else |_| {}
 }
 
-inline fn input_action(index: u16) void {
+fn input_action(index: u16) void {
     @setEvalBranchQuota(200000);
     switch(index) {
         inline 0...KeyBindTable.len - 1 => |i| {
@@ -133,7 +133,7 @@ fn generic_func(_ : anytype) void{
     // unreachable;
 }
 
-inline fn get_index(mode: core.Mode, mod: Mod, key: u32) u16 {
+fn get_index(mode: core.Mode, mod: Mod, key: u32) u16 {
     const mode_i: u16 = @intFromEnum(mode);
     const mod_i: u16 = @intFromEnum(mod);
     const key_i: u16 = @truncate(key);

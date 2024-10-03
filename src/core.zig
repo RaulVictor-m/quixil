@@ -6,7 +6,7 @@ const config = @import("config.zig");
 
 /// there is a hook for every API call
 pub const Hook = struct {HookFunc, HookType};
-pub const HookFunc = fn() callconv(.Inline) void;
+pub const HookFunc = fn() void;
 pub const HookType = enum {
     ChangeMode,
     Init,
@@ -63,16 +63,16 @@ pub const api = default_api;
 
 inline fn hook(t: HookType) void{
     inline for(config.hooks_list) |h| {
-        if(comptime h[1] == t) h[0]();
+        if(comptime h[1] == t) @call(.always_inline, h[0], .{});
     }
 }
 pub const default_api = struct {
     ///returns the editors current buffer
-    pub inline fn c_buf() *Buffer {
+    pub fn c_buf() *Buffer {
         return &g_editor.buffers.items[g_editor.current_buf];
     }
 
-    pub inline fn get_mode() Mode {
+    pub fn get_mode() Mode {
         return g_editor.mode;
     }
 
@@ -574,19 +574,19 @@ pub const Buffer = struct {
     // ///////////////////////////////////////
     // Text data wrapper
     // ///////////////////////////////////////
-    pub inline fn lines_size(self: Buffer) usize {
+    pub fn lines_size(self: Buffer) usize {
         return self.text.data.items.len;
     }
 
-    pub inline fn line_size(self: Buffer, line: usize) usize {
+    pub fn line_size(self: Buffer, line: usize) usize {
         return self.text.data.items[line].items.len;
     }
 
-    pub inline fn get_line(self: Buffer, line: usize) []const u8{
+    pub fn get_line(self: Buffer, line: usize) []const u8{
         return self.text.data.items[line].items;
     }
 
-    pub inline fn get_c(self: Buffer, line: usize, row: usize) u8{
+    pub fn get_c(self: Buffer, line: usize, row: usize) u8{
         return self.text.data.items[line].items[row];
     }
 
