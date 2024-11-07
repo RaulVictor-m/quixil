@@ -44,6 +44,7 @@ pub const Selection = struct {
         Back,
         Front,
     },
+    vx_point: u32 = 0,
 };
 
 pub const Registers = struct {
@@ -204,18 +205,25 @@ pub const default_api = struct {
 
     pub fn paste_i() void {
         @panic("unimplemented");
+    }
 
+    pub fn new_sel(s: Selection) void {
+        const buf = c_buf();
+        buf.sels.append(s) catch null;
+    }
+
+    pub fn put_sel_down() void {
+        @panic("unimplemented");
     }
 
     pub fn sel_split_lines() void {
         @panic("unimplemented");
-
     }
 
     pub fn sel_split_two() void {
         @panic("unimplemented");
-
     }
+
     pub const Move = enum {Up, Down, LLeft, LRight, WLeft, WRight, };
     pub fn move(mov: anytype) void {
         if(@TypeOf(mov) != Move) @compileError("API move: you should provide a Move but provided" ++ @typeName(@TypeOf(mov)));
@@ -229,6 +237,8 @@ pub const default_api = struct {
                     var p = if(sel.facing == .Front) sel.end else sel.begin;
 
                     p.y -|= 1;
+                    p.x = sel.vx_point;
+
                     if(p.x > buf.line_size(p.y)) {
                         p.x = @truncate(buf.line_size(p.y) - 1);
                     }
@@ -248,6 +258,8 @@ pub const default_api = struct {
                         return;
                     }
                     p.y += 1;
+                    p.x = sel.vx_point;
+
                     if(p.x > buf.line_size(p.y)) {
                         p.x = @truncate(buf.line_size(p.y) - 1);
                     }
@@ -269,6 +281,7 @@ pub const default_api = struct {
                             p.x = 0;
                         }
                     }
+                    sel.vx_point = p.x;
                     sel.begin = p;
                     sel.end = p;
                     sel.facing = .Front;
@@ -286,6 +299,7 @@ pub const default_api = struct {
                     }else {
                         p.x -= 1;
                     }
+                    sel.vx_point = p.x;
                     sel.begin = p;
                     sel.end = p;
                     sel.facing = .Back;
@@ -320,6 +334,7 @@ pub const default_api = struct {
                     };
 
                     p.y -|= 1;
+                    p.x = sel.vx_point;
 
                     if(p.x > buf.line_size(p.y)) {
                         p.x = @truncate(buf.line_size(p.y) - 1);
@@ -341,10 +356,11 @@ pub const default_api = struct {
                         break :blk &sel.begin;
                     };
 
-                    if(sel.end.y >= buf.lines_size()-1){
+                    if(sel.end.y == buf.lines_size()-1){
                         return;
                     }
                     p.y += 1;
+                    p.x = sel.vx_point;
 
                     if(p.x > buf.line_size(p.y)) {
                         p.x = @truncate(buf.line_size(p.y) - 1);
@@ -370,6 +386,7 @@ pub const default_api = struct {
                     } else {
                         p.x += 1;
                     }
+                    sel.vx_point = p.x;
                 }
             },
             .LRight => {
@@ -391,6 +408,7 @@ pub const default_api = struct {
                     }else {
                         p.x -= 1;
                     }
+                    sel.vx_point = p.x;
                 }
             },
             .WLeft  => @panic("mov WLeft  unimplemented"),
@@ -586,7 +604,7 @@ pub const Buffer = struct {
 
         //init sels
         self.sels = try ArrayList(Selection).initCapacity(allocator, 10);
-        _ = try self.sels.append(.{ .begin = .{.x = 0, .y = 0}, .end = .{.x = 0, .y = 0}, .facing = .Front});
+        _ = try self.sels.append(.{ .begin = .{.x = 0, .y = 0}, .end = .{.x = 0, .y = 0}, .facing = .Front, .vx_point = 0});
         return self;
     }
 
@@ -634,6 +652,7 @@ pub const Buffer = struct {
         //init sels
         self.sels = try ArrayList(Selection).initCapacity(allocator, 10);
         _ = try self.sels.append(.{ .begin = .{.x = 0, .y = 0}, .end = .{.x = 0, .y = 0}, .facing = .Front});
+        _ = try self.sels.append(.{ .begin = .{.x = 0, .y = 5}, .end = .{.x = 0, .y = 5}, .facing = .Front});
         return self;
     }
 
