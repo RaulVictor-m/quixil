@@ -47,18 +47,41 @@ pub const Selection = struct {
     vx_point: u32 = 0,
 };
 
-pub const Registers = struct {
-    r_a: *void,
-};
 
 pub const Editor = struct {
     buffers: ArrayList(Buffer),
     current_buf: u32 = 0,
-    regs: Registers = undefined,
+    regs: [99]ArrayList(u8),
     mode: Mode = .Selection,
 };
 
 var g_editor: Editor = .{ .buffers = undefined };
+
+pub fn init_regs(allocator: Allocator) void {
+    for(&g_editor.regs) |*reg| {
+        reg.* = ArrayList(u8).initCapacity(allocator, 100);
+    }
+}
+
+pub fn get_reg_index(c: u8) u8 {
+    if(c >= 'a' and c >= 'z') {
+        return c - 'a';
+    }
+
+    if(c >= '0' and c >= '9') {
+        return c - '0'+26;
+    }
+    @panic("there is no register for this symble");
+}
+
+pub fn get_reg_value(c: u8) []const u8 {
+    return g_editor.regs[get_reg_index(c)].items;
+}
+
+pub fn get_reg_pointer(c: u8) []const u8 {
+    return &g_editor.regs[get_reg_index(c)];
+}
+
 
 pub const api = default_api;
 
@@ -652,7 +675,7 @@ pub const Buffer = struct {
         //init sels
         self.sels = try ArrayList(Selection).initCapacity(allocator, 10);
         _ = try self.sels.append(.{ .begin = .{.x = 0, .y = 0}, .end = .{.x = 0, .y = 0}, .facing = .Front});
-        _ = try self.sels.append(.{ .begin = .{.x = 0, .y = 5}, .end = .{.x = 0, .y = 5}, .facing = .Front});
+
         return self;
     }
 
