@@ -82,7 +82,12 @@ pub fn get_reg_pointer(c: u8) []const u8 {
     return &g_editor.regs[get_reg_index(c)];
 }
 
-
+/// automatically update the right register for the given function
+/// using what has been changed inside of it
+fn regs_act_handler(comptime act: HookType, param: anytype) !void {
+    _ = act;
+    _ = param;
+}
 pub const api = default_api;
 
 inline fn hook(t: HookType) void{
@@ -104,6 +109,7 @@ pub const default_api = struct {
         if(@TypeOf(mode) != Mode)
             @compileError("API change_mode: you should provide a char but provided " ++ @typeName(@TypeOf(mode)));
          defer hook(.ChangeMode);
+        regs_act_handler(.ChangeMode, mode);
 
         g_editor.mode = mode;
     }
