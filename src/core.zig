@@ -55,7 +55,7 @@ pub const Editor = struct {
     mode: Mode = .Selection,
 };
 
-var g_editor: Editor = .{ .buffers = undefined };
+var g_editor: Editor = .{ .buffers = undefined, .regs = undefined};
 
 pub fn init_regs(allocator: Allocator) void {
     for(&g_editor.regs) |*reg| {
@@ -109,7 +109,7 @@ pub const default_api = struct {
         if(@TypeOf(mode) != Mode)
             @compileError("API change_mode: you should provide a char but provided " ++ @typeName(@TypeOf(mode)));
          defer hook(.ChangeMode);
-        regs_act_handler(.ChangeMode, mode);
+        // regs_act_handler(.ChangeMode, mode);
 
         g_editor.mode = mode;
     }

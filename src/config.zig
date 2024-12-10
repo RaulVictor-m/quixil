@@ -2,6 +2,7 @@ const std = @import("std");
 const term = @cImport(@cInclude("termbox.h"));
 const core = @import("core.zig");
 const client = @import("client.zig");
+const input = @import("input.zig");
 
 pub fn testing() void {
     // core.api.insert(100);
@@ -12,15 +13,14 @@ pub const hooks_list = [_]core.Hook {
     .{testing, .Init},
     .{testing, .Init},
 } ++
-    client.hooks_list
-;
+    client.hooks_list;
 
-const Mod     = client.Mod;
+const Mod     = input.Mod;
 const Mode    = core.Mode;
-const KeyBind = client.KeyBind;
+const KeyBind = input.KeyBind;
 const Move    = api.Move;
 const api     = core.api;
-const param   = client.param;
+const param   = input.param;
 
 fn k(a: anytype) KeyBind {
     _ = a;

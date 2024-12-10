@@ -2,9 +2,10 @@ const std = @import("std");
 const term = @cImport(@cInclude("termbox.h"));
 const core = @import("core.zig");
 const client = @import("client.zig");
+const input_lib = @import("input.zig");
 const Point = core.Point;
-const KeyPress = client.KeyPress;
-const Mod = client.Mod;
+const KeyPress = input_lib.KeyPress;
+const Mod = input_lib.Mod;
 
 const Color = enum(c_int){
     Blue = term.TB_BLUE,
