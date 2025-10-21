@@ -11,7 +11,6 @@ pub fn testing() void {
 
 pub const hooks_list = [_]core.Hook {
     .{testing, .Init},
-    .{testing, .Init},
 } ++
     client.hooks_list;
 

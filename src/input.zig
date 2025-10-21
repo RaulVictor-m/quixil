@@ -38,7 +38,7 @@ pub const KeyBind = struct {
     Mod,                      //1
     u8,                       //2
     KeyBindFunc,              //3
-    ?Param = null,
+    ?Param,
 };
 
 fn get(
